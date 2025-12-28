@@ -123,9 +123,10 @@ class BettingMarkets:
             }
 
         # 4. BTTS (Both Teams To Score)
+        # 4. BTTS (Both Teams To Score)
         predictions["btts"] = {
             "market_type": "Both Teams To Score (BTTS)",
-            "market_prediction": "Yes" if btts_prob > 0.5 else "No",
+            "market_prediction": "BTTS Yes" if btts_prob > 0.5 else "BTTS No",
             "confidence_score": btts_prob if btts_prob > 0.5 else 1 - btts_prob,
             "reason": f"BTTS probability: {btts_prob:.2f}"
         }
@@ -204,12 +205,34 @@ class BettingMarkets:
         if very_high_conf:
              # Sort by confidence
              very_high_conf.sort(key=lambda x: x["confidence_score"], reverse=True)
+             
+             # Check if we have safe markets within the top confident ones (e.g. within 0.05 of the max score)
+             max_score = very_high_conf[0]["confidence_score"]
+             top_tier = [m for m in very_high_conf if m["confidence_score"] >= max_score - 0.05]
+             
+             # Try to find a safe market in the top tier
+             safe_markets = ["double_chance", "over_1.5", "home_over_0.5", "away_over_0.5", "draw_no_bet"]
+             best_safe = next((m for m in top_tier if any(sm in m["market_type"].lower() or sm in m.get("market_key", "") for sm in safe_markets)), None)
+             
+             # Also match by key if possible, but 'market_key' isn't in the value dict usually, we rely on checking known types
+             # Let's verify how to identify them. The keys in 'predictions' dict are safe_markets.
+             # We can iterate the predictions dict keys to find the objects.
+             
+             # Better approach:
+             # Find if the top confidence item is already safe. If not, look for a safe one with similar confidence.
+             # Since we only have values here, we check market_type.
+             
+             safe_types = ["Double Chance", "Over/Under 1.5", "Team Goals", "Draw No Bet"]
+             best_safe_in_tier = next((m for m in top_tier if any(st in m["market_type"] for st in safe_types)), None)
+             
+             selected = best_safe_in_tier if best_safe_in_tier else very_high_conf[0]
+
              return {
-                 "market_key": "best_safe",
-                 "market_type": very_high_conf[0]["market_type"],
-                 "prediction": very_high_conf[0]["market_prediction"],
-                 "confidence": very_high_conf[0]["confidence_score"],
-                 "reason": very_high_conf[0]["reason"]
+                 "market_key": "best_safe" if best_safe_in_tier else "best_high_conf", # Just a tag
+                 "market_type": selected["market_type"],
+                 "prediction": selected["market_prediction"],
+                 "confidence": selected["confidence_score"],
+                 "reason": selected["reason"]
              }
 
         # 2. Safety First Logic (Conservative default)
