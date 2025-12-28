@@ -1,0 +1,7 @@
+
+google.generativeai
+playwright
+dotenv
+numpy
+pandas
+scikit-learn==1.7.2
