@@ -17,6 +17,26 @@ from Neo.intelligence import get_selector, fb_universal_popup_dismissal as neo_p
 from .ui import robust_click, handle_page_overlays, dismiss_overlays
 from .mapping import find_market_and_outcome
 from .slip import get_bet_slip_count
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+async def ensure_bet_insights_collapsed(page: Page):
+    """Ensure the bet insights widget is collapsed to prevent obstruction."""
+    try:
+        header = page.locator('div.srct-widget-header_custom').first
+        if await header.count() > 0:
+            arrow = header.locator('div.srct-widget-header_custom-arrow')
+            if await arrow.count() > 0:
+                is_expanded = await arrow.evaluate('el => el.classList.contains("rotate-arrow")')
+                if is_expanded:
+                    print("    [UI] Collapsing Bet Insights widget...")
+                    await header.click()
+                    # Wait for collapse animation or arrow status change
+                    try:
+                       await arrow.wait_for(state='visible', timeout=2000)
+                    except:
+                       pass
+    except Exception as e:
+        print(f"    [UI] Bet Insights collapse check failed (non-critical): {e}")
 
 async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_predictions: List[Dict], target_date: str):
     """Visit matched URLs and place bets using prediction mappings."""
@@ -53,6 +73,7 @@ async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_p
 
             await asyncio.sleep(5)
             await neo_popup_dismissal(page, match_url)
+            await ensure_bet_insights_collapsed(page)
 
             # After successful navigation, get the main frame and place bets
             frame = await get_main_frame(page)
@@ -66,8 +87,14 @@ async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_p
                 print(f"    [Info] No market found for prediction: {pred.get('prediction', 'N/A')}")
                 update_prediction_status(match_id, target_date, 'dropped')
                 continue
+            
+            # Special handling for Draw No Bet abbreviation
+            search_market_name = m_name
+            if m_name.endswith("(DNB)"):
+                search_market_name = "Draw No Bet"
+                print(f"    [Betting] Adjusted search for {m_name} -> {search_market_name}")
 
-            print(f"    [Betting] Looking for market '{m_name}' with outcome '{o_name}'")
+            print(f"    [Betting] Looking for market '{search_market_name}' with outcome '{o_name}'")
 
             # Find and click search icon using dynamic selector
             search_sel = get_selector("fb_match_page", "search_icon")
@@ -96,7 +123,7 @@ async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_p
             if input_sel:
                 try:
                     if await frame.locator(input_sel).count() > 0:
-                        await frame.locator(input_sel).first.fill(m_name)
+                        await frame.locator(input_sel).first.fill(search_market_name)
                         print(f"    [Betting] Filled search input with selector: {input_sel}")
                         input_found = True
                         await asyncio.sleep(2)

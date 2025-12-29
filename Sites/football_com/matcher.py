@@ -148,12 +148,18 @@ async def match_predictions_with_site(day_predictions: List[Dict], site_matches:
             time_bonus = 0.0
             if pred_utc_dt and site_utc_dt:
                 time_diff = abs((pred_utc_dt - site_utc_dt).total_seconds())
-                if time_diff <= 3600:  # Exact match (±60 minutes) - FIX: was 36000
+                if time_diff <= 3600:  # Exact match (±60 minutes)
                     time_bonus = 0.8
                 elif time_diff <= 7200:  # Within 120 minutes for flexibility
                     time_bonus = 0.4
-
+            
             total_score = base_score + time_bonus
+
+            # Debug logging for close calls
+            if team_score > 0.6 or total_score > 0.5:
+                print(f"    [Debug Match] {pred_home} vs {site_home} | Score: {total_score:.2f} (Team: {team_score:.2f}, Lg: {league_sim:.2f}, TimeBonus: {time_bonus})")
+                if not pred_utc_dt or not site_utc_dt:
+                    print(f"      -> Time Parse Warning: Pred: {pred_utc_dt}, Site: {site_utc_dt}")
 
             # Ensure a minimum team similarity before accepting a match, even with a time bonus
             if team_score > 0.4 and total_score > best_score and total_score > 0.6:
@@ -164,8 +170,8 @@ async def match_predictions_with_site(day_predictions: List[Dict], site_matches:
         if best_match:
             mapping[pred_id] = best_match.get('url', '')
             used_site_matches.add(best_match.get('url', ''))
-            time_info = f" (UTC: {pred_utc_dt.strftime('%Y-%m-%d %H:%M') if pred_utc_dt else 'N/A'})"
-            print(f"    Matched {pred_home} vs {pred_away}{time_info} -> {best_match.get('home', '')} vs {best_match.get('away', '')} (score: {best_score:.2f})")
+            time_str = pred_utc_dt.strftime('%Y-%m-%d %H:%M') if pred_utc_dt else 'N/A'
+            print(f"    Matched {pred_home} vs {pred_away} ({time_str}) -> {best_match.get('home', '')} vs {best_match.get('away', '')} (score: {best_score:.2f})")
 
     print(f"  [Matcher] Successfully matched {len(mapping)}/{len(day_predictions)} predictions.")
     return mapping

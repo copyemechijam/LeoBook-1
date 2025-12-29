@@ -22,6 +22,11 @@ async def extract_league_matches(page: Page, target_date: str) -> List[Dict]:
     match_card_sel = get_selector("fb_schedule_page", "match_rows") or ".match-card-section.match-card"
     match_url_sel = get_selector("fb_schedule_page", "match_url") or ".match-card > a.card-link"
     league_title_sel = get_selector("fb_schedule_page", "league_title_link") or ".league-link"
+    
+    # Match row specific selectors
+    home_team_sel = get_selector("fb_schedule_page", "match_row_home_team_name") or ".home-team-name"
+    away_team_sel = get_selector("fb_schedule_page", "match_row_away_team_name") or ".away-team-name"
+    time_sel = get_selector("fb_schedule_page", "match_row_time") or ".time"
 
     try:
         league_headers = await page.locator(league_header_sel).all()
@@ -40,36 +45,36 @@ async def extract_league_matches(page: Page, target_date: str) -> List[Dict]:
                 
                 print(f"  -> Processing League {i+1}: {league_text}")
 
-                # Check expansion state
-                wrapper_class = await header_locator.get_attribute("class")
-                is_collapsed = "collapsed" in str(wrapper_class)
+                if league_text.startswith("Simulated Reality League"):
+                     print(f"    -> Skipping Simulated Reality League.")
+                     continue
 
-                if is_collapsed:
-                    print(f"    -> {league_text}: clicked to expand.")
-                    await header_locator.click()
-                    await asyncio.sleep(2.0) # Wait for animation
-                    
-                    # Double check if it expanded
-                    wrapper_class_after = await header_locator.get_attribute("class")
-                    if "collapsed" in str(wrapper_class_after):
-                         print(f"    -> {league_text}: Still collapsed. Clicking again to expand...")
-                         await header_locator.click()
-                         await asyncio.sleep(2.0)
-                         print(f"    -> {league_text}: Clicked to expand.")
+                # Expansion Logic
+                if i == 0:
+                     print(f"    -> {league_text}: Default open state (League 1). Skipping expand click.")
+                     await asyncio.sleep(1.0)
                 else:
-                    print(f"    -> {league_text}: Already expanded. Extracting matches...")
+                     # Click to expand - Primary Method
+                     if await league_element.is_visible():
+                         await league_element.click()
+                     else:
+                         await header_locator.click()
+                     await asyncio.sleep(1.0)
 
-                # Extract Matches from Sibling Container
+                # Extraction Function (Reusable blob)
+                matches_in_section = []
                 matches_container = await header_locator.evaluate_handle('(el) => el.nextElementSibling')
+                
+                await asyncio.sleep(1.0)
                 if matches_container:
                     matches_in_section = await matches_container.evaluate("""(container, args) => {
                         const { selectors, leagueText } = args;
                         const results = [];
                         const cards = container.querySelectorAll(selectors.match_card_sel);
                         cards.forEach(card => {
-                            const homeEl = card.querySelector('.home-team-name');
-                            const awayEl = card.querySelector('.away-team-name');
-                            const timeEl = card.querySelector('.time');
+                            const homeEl = card.querySelector(selectors.home_team_sel);
+                            const awayEl = card.querySelector(selectors.away_team_sel);
+                            const timeEl = card.querySelector(selectors.time_sel);
                             const linkEl = card.querySelector(selectors.match_url_sel) || card.closest('a');
                             
                             if (homeEl && awayEl) {
@@ -84,20 +89,75 @@ async def extract_league_matches(page: Page, target_date: str) -> List[Dict]:
                             }
                         });
                         return results;
-                    }""", {"selectors": {"match_card_sel": match_card_sel, "match_url_sel": match_url_sel}, "leagueText": league_text, "targetDate": target_date})
-                    
-                    if matches_in_section:
-                        all_matches.extend(matches_in_section)
-                        print(f"    -> {league_text}: Extracted {len(matches_in_section)} matches.")
-                    else:
-                        print(f"    -> {league_text}: No matches found in section.")
-                
-                # Close section after processing to keep page clean/performant
-                wrapper_class_final = await header_locator.get_attribute("class")
-                if "collapsed" not in str(wrapper_class_final):
+                    }""", {
+                        "selectors": {
+                            "match_card_sel": match_card_sel, 
+                            "match_url_sel": match_url_sel,
+                            "home_team_sel": home_team_sel,
+                            "away_team_sel": away_team_sel,
+                            "time_sel": time_sel
+                        }, 
+                        "leagueText": league_text, 
+                        "targetDate": target_date
+                    })
+
+                # Retry Logic for non-first leagues if empty
+                if not matches_in_section and i > 0:
+                     print(f"    -> {league_text}: No matches found. Retrying expansion with alternative click (Header Text)...")
+                     await page.locator(f'h4:has-text("{league_text}")').click()
+                     await asyncio.sleep(1.0)
+                     
+                     # Re-evaluate
+                     matches_container = await header_locator.evaluate_handle('(el) => el.nextElementSibling')
+                     if matches_container:
+                        matches_in_section = await matches_container.evaluate("""(container, args) => {
+                            const { selectors, leagueText } = args;
+                            const results = [];
+                            const cards = container.querySelectorAll(selectors.match_card_sel);
+                            cards.forEach(card => {
+                                const homeEl = card.querySelector(selectors.home_team_sel);
+                                const awayEl = card.querySelector(selectors.away_team_sel);
+                                const timeEl = card.querySelector(selectors.time_sel);
+                                const linkEl = card.querySelector(selectors.match_url_sel) || card.closest('a');
+                                
+                                if (homeEl && awayEl) {
+                                    results.push({ 
+                                        home: homeEl.innerText.trim(), 
+                                        away: awayEl.innerText.trim(), 
+                                        time: timeEl ? timeEl.innerText.trim() : "N/A", 
+                                        league: leagueText, 
+                                        url: linkEl ? linkEl.href : "", 
+                                        date: args.targetDate 
+                                    });
+                                }
+                            });
+                            return results;
+                        }""", {
+                            "selectors": {
+                                "match_card_sel": match_card_sel, 
+                                "match_url_sel": match_url_sel,
+                                "home_team_sel": home_team_sel,
+                                "away_team_sel": away_team_sel,
+                                "time_sel": time_sel
+                            }, 
+                            "leagueText": league_text, 
+                            "targetDate": target_date
+                        })
+
+                # Result Handling
+                if matches_in_section:
+                    all_matches.extend(matches_in_section)
+                    print(f"    -> {league_text}: Extracted {len(matches_in_section)} matches.")
+                else:
+                    print(f"    -> {league_text}: No matches found in section after attempts.")
+
+                # Cleanup: Toggle to close
+                print(f"    -> {league_text}: Closing section.")
+                if await league_element.is_visible():
+                     await league_element.click()
+                else:
                      await header_locator.click()
-                     print(f"    -> {league_text}: Closing expanded section.")
-                     await asyncio.sleep(1)
+                await asyncio.sleep(.5)
 
             except Exception as e:
                 print(f"    [Harvest Error] Failed to process a league header: {e}")

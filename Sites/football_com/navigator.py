@@ -131,7 +131,7 @@ async def extract_balance(page: Page) -> float:
     await asyncio.sleep(2)
     try:
         balance_sel = get_selector("fb_main_page", "navbar_balance")
-        
+        await asyncio.sleep(2)
         if balance_sel and await page.locator(balance_sel).count() > 0:
             balance_text = await page.locator(balance_sel).inner_text(timeout=WAIT_FOR_LOAD_STATE_TIMEOUT)
             import re

@@ -2677,3 +2677,7 @@ Call log:
 Call log:
   - navigating to "https://www.flashscore.com/match/football/al-fateh-OIDqIbjd/al-khaleej-UanWW9fq/?mid=COZS7WFG", waiting until "domcontentloaded"
 
+2025-12-29T21:02:16.334373 [MEDIUM] review_task_error: Review failed for hdpKUTtK: Page.goto: Timeout 180000ms exceeded.
+Call log:
+  - navigating to "https://www.flashscore.com/match/football/as-douanes-ShQaQMYS/rahimo-EiRd35CK/?mid=hdpKUTtK", waiting until "domcontentloaded"
+
