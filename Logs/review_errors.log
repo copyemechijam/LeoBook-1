@@ -2681,3 +2681,15 @@ Call log:
 Call log:
   - navigating to "https://www.flashscore.com/match/football/as-douanes-ShQaQMYS/rahimo-EiRd35CK/?mid=hdpKUTtK", waiting until "domcontentloaded"
 
+2025-12-30T06:05:26.487036 [MEDIUM] score_extraction_error: Failed to extract score: Locator.inner_text: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("div.detailScore__wrapper > span:nth-child(3)").first
+
+2025-12-30T06:06:34.266964 [MEDIUM] score_extraction_error: Failed to extract score: Locator.inner_text: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("div.detailScore__wrapper > span:nth-child(3)").first
+
+2025-12-30T06:07:45.636370 [MEDIUM] score_extraction_error: Failed to extract score: Locator.inner_text: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("div.detailScore__wrapper > span:nth-child(3)").first
+
