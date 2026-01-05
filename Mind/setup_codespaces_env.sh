@@ -47,16 +47,21 @@ if [ -n "$SOURCE_DIR" ]; then
         echo "✓ Copied llama-server"
     fi
 
-    # Copy all shared libraries
-    if ls "$SOURCE_DIR"/*.so 1> /dev/null 2>&1; then
-        cp "$SOURCE_DIR"/*.so "$MIND_DIR/" 2>/dev/null
+    # Copy all shared libraries (.so files)
+    if ls "$SOURCE_DIR"/*.so* 1> /dev/null 2>&1; then
+        cp "$SOURCE_DIR"/*.so* "$MIND_DIR/" 2>/dev/null
         echo "✓ Copied shared libraries"
-    fi
-
-    # Copy any additional runtime files
-    if ls "$SOURCE_DIR"/*.so.* 1> /dev/null 2>&1; then
-        cp "$SOURCE_DIR"/*.so.* "$MIND_DIR/" 2>/dev/null
-        echo "✓ Copied versioned libraries"
+        ls "$SOURCE_DIR"/*.so* | wc -l | xargs echo "  Found" libraries
+    else
+        echo "⚠ No .so files found in $SOURCE_DIR"
+        echo "  Checking for libraries in other locations..."
+        # Try to find libraries in the entire extracted directory
+        find "$MIND_DIR/temp_extract" -name "*.so*" -type f | head -10
+        if [ $? -eq 0 ]; then
+            echo "  Copying libraries from alternative locations..."
+            find "$MIND_DIR/temp_extract" -name "*.so*" -type f -exec cp {} "$MIND_DIR/" \;
+            echo "✓ Copied libraries from alternative locations"
+        fi
     fi
 else
     echo "ERROR: Could not find llama-server in extracted archive!"
