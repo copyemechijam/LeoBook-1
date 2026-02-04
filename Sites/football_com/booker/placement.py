@@ -145,168 +145,118 @@ async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_p
             print(f"    [Match Error] {e}")
             await capture_debug_snapshot(page, f"error_{match_id}", str(e))
 
-async def finalize_accumulator(page: Page, target_date: str) -> bool:
-    """Finalize the betslip with mandatory constraints."""
-    print(f"[Betting] Finalizing accumulator for {target_date}...")
-    
-    try:
-        # Pre-check Balance
-        from ..navigator import extract_balance
-        pre_balance = await extract_balance(page)
-        print(f"    [Balance] Pre-bet: {pre_balance}")
 
-        # 1. Open Slip
-        slip_trigger = SelectorManager.get_selector_strict("fb_match_page", "slip_trigger_button")
-        if slip_trigger and await page.locator(slip_trigger).count() > 0:
-             await robust_click(page.locator(slip_trigger).first, page)
-             await asyncio.sleep(2)
-
-        # 2. Select Multiple Tab
-        multi_tab = SelectorManager.get_selector_strict("fb_match_page", "slip_tab_multiple")
-        if multi_tab and await page.locator(multi_tab).count() > 0:
-             await robust_click(page.locator(multi_tab).first, page)
-             await asyncio.sleep(1)
-
-        # 3. Enter Stake (1 Naira)
-        stake_input = SelectorManager.get_selector_strict("fb_match_page", "betslip_stake_input") or SelectorManager.get_selector_strict("fb_match_page", "betslip_stake_input_by_attribute")
-        if stake_input and await page.locator(stake_input).count() > 0:
-             await page.locator(stake_input).first.fill("1")
-             await page.keyboard.press("Enter")
-             await asyncio.sleep(1)
-        else:
-             print("    [Error] Stake input not found!")
-             return False
-
-        # 4. Place Bet
-        place_btn = SelectorManager.get_selector_strict("fb_match_page", "betslip_place_bet_button") or SelectorManager.get_selector_strict("fb_match_page", "place_bet_button_by_attribute")
-        if place_btn and await page.locator(place_btn).count() > 0:
-             print("    [Booking] Clicking Place Bet...")
-             await robust_click(place_btn, page)
-             await asyncio.sleep(3)
-        else:
-             print("    [Error] Place bet button not found!")
-             return False
-
-        # 5. Confirm (if dialog)
-        confirm_btn = SelectorManager.get_selector_strict("fb_match_page", "confirm_bet_button") or SelectorManager.get_selector_strict("fb_match_page", "confirm_bet_button_by_attribute")
-        if confirm_btn and await page.locator(confirm_btn).count() > 0:
-             if await page.locator(confirm_btn).first.isVisible():
-                  print("    [Booking] Confirming bet...")
-                  await robust_click(confirm_btn, page)
-                  await asyncio.sleep(5)
-
-        # 6. Post-Verification (Balance & Code)
-        # Wait for booking code
-        await extract_booking_details(page)
-        
-        # Mandatory Balance Check
-        post_balance = await extract_balance(page)
-        print(f"    [Balance] Post-bet: {post_balance}")
-        
-        if post_balance < pre_balance:
-             print("    [Verification] Balance decreased. Booking confirmed.")
-             return True
-        else:
-             print("    [Verification FAILED] Balance matched pre-bet balance.")
-             return False
-
-    except Exception as e:
-        await log_error_state(page, "finalize_fatal", e)
-        return False
-
-async def place_multi_bet_from_codes(page: Page, verified_predictions: List[Dict], target_date: str) -> bool:
+async def place_multi_bet_from_codes(page: Page, harvested_codes: List[str], current_balance: float):
     """
-    Phase 2b: Execute
-    Builds an accumulator from several verified matches (already has booking_code/url).
+    Phase 2b (Execute):
+    1. Filter codes (Validation).
+    2. Add max 12 selections to slip (via URL param).
+    3. Calculate stake (min 1% or N1, max 50% balance).
+    4. Place bet and Verify.
     """
-    if not verified_predictions:
-        print("    [Execute] No verified predictions to book.")
-        return False
+    if not harvested_codes:
+        print("    [Execute] No codes to place.")
+        return
 
-    print(f"\n   [Execute] Starting multi-bet construction for {len(verified_predictions)} matches...")
+    # A. Validate & Limit
+    # For now, just take first 12 valid codes
+    final_codes = harvested_codes[:12]
+    print(f"    [Execute] Building Multi with {len(final_codes)} selections: {final_codes}")
 
-    # 1. Ensure clean start
-    await force_clear_slip(page)
+    # B. Add to Slip Loop
+    # Strategy: Visit each ?shareCode=URL to add them.
+    # Note: Football.com usually adds to slip when visiting shareCode link.
+    # We must ensure we don't clear slip between these!
     
-    success_count = 0
-    managed_urls = set()
-
-    for pred in verified_predictions:
-        url = pred.get('url')
-        fixture_id = str(pred.get('fixture_id'))
+    # First one clears? No, rely on force_clear_slip having run BEFORE state 2b.
+    # Actually, we should force clear once before starting the build.
+    await clear_bet_slip(page) # Use simple clear, or force.
+    
+    added_count = 0
+    for code in final_codes:
+        if not code: continue
         
-        if not url or url in managed_urls:
-             continue
-        
-        print(f"    [Add] {pred.get('home_team')} vs {pred.get('away_team')}...")
-        
+        # Construct Load URL
+        load_url = f"https://www.football.com/ng/m?shareCode={code}"
         try:
-            # Re-use match adding logic but in a batch-friendly way
-            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
-            await asyncio.sleep(1.5)
-            await neo_popup_dismissal(page, url)
-
-            m_name, o_name = await find_market_and_outcome(pred)
-            if not m_name:
-                continue
-
-            # Selection Logic (Consolidated from book_single_match for DRY)
-            search_icon = SelectorManager.get_selector_strict("fb_match_page", "search_icon")
-            search_input = SelectorManager.get_selector_strict("fb_match_page", "search_input")
+            print(f"    [Execute] Loading selection {code}...")
+            await page.goto(load_url, timeout=30000, wait_until='domcontentloaded')
+            # Wait for "Betslip count increased" or generic wait
+            await asyncio.sleep(2) 
             
-            if search_icon and search_input:
-                try:
-                    if await page.locator(search_icon).first.is_visible(timeout=3000):
-                        await robust_click(page.locator(search_icon).first, page)
-                        await page.locator(search_input).first.fill(m_name)
-                        await page.keyboard.press("Enter")
-                        await asyncio.sleep(1)
-                except: pass
-
-            outcome_selectors = [
-                 f"button:has-text('{o_name}')",
-                 f"div[role='button']:has-text('{o_name}')",
-                 f"span:text-is('{o_name}')",
-                 f".m-outcome:has-text('{o_name}')"
-            ]
-            
-            outcome_added = False
-            initial_count = await get_bet_slip_count(page)
-
-            for sel in outcome_selectors:
-                btn = page.locator(sel).first
-                if await btn.count() > 0 and await btn.is_visible():
-                    if await robust_click(btn, page):
-                        await asyncio.sleep(1)
-                        if await get_bet_slip_count(page) > initial_count:
-                            outcome_added = True
-                            success_count += 1
-                            managed_urls.add(url)
-                            update_prediction_status(fixture_id, target_date, 'added_to_slip')
-                            break
-            
-            if not outcome_added:
-                print(f"    [Fail] Could not add {o_name} for {fixture_id}")
-                update_prediction_status(fixture_id, target_date, 'failed_add')
-
+            # Simple check: Does count increase?
+            # Optimization: Just proceed, verify count at end.
+            added_count += 1
         except Exception as e:
-            print(f"    [Error] Failed to add {fixture_id}: {e}")
+            print(f"    [Execute Error] Failed to load code {code}: {e}")
 
-    # 2. Finalize Accumulator if we have selections
-    if success_count > 0:
-        print(f"    [Execute] Finalizing accumulator with {success_count} matches...")
-        return await finalize_accumulator(page, target_date)
+    # C. Verify Slip Count
+    total_in_slip = await get_bet_slip_count(page)
+    print(f"    [Execute] Slip Count: {total_in_slip} (Expected ~{len(final_codes)})")
     
-    return False
+    if total_in_slip < 1:
+        print("    [Execute Failure] No bets in slip after loading codes.")
+        return
 
-async def extract_booking_details(page: Page) -> str:
-    """Extract and return the booking code if visible."""
-    code_sel = SelectorManager.get_selector_strict("fb_match_page", "booking_code_text") or ".m-booking-code"
-    booking_code = "UNKNOWN"
-    try:
-        await page.wait_for_selector(code_sel, state="visible", timeout=12000)
-        booking_code = (await page.locator(code_sel).first.inner_text()).strip()
-        print(f"    [Success] Booking Code: {booking_code}")
-    except:
-        print("    [Warning] Booking code element not found or timed out.")
-    return booking_code
+    # D. Open Slip & Finalize
+    # 1. Open Slip
+    slip_trigger = SelectorManager.get_selector_strict("fb_match_page", "slip_trigger_button")
+    if slip_trigger and await page.locator(slip_trigger).count() > 0:
+            await robust_click(page.locator(slip_trigger).first, page)
+            await asyncio.sleep(2)
+    else:
+        print("    [Execute Error] Could not open slip.")
+        return
+
+    # 2. Select Multiple Tab (if exists/needed)
+    # usually defaults to accumulator if multiple items
+
+    # 3. Calculate Stake
+    # Rules: Min N1, Max 50% balance
+    min_stake = 1 # N1
+    max_stake = current_balance * 0.50
+    # Proposed: 1% of balance or N100, clamped
+    raw_stake = max(100, current_balance * 0.01) 
+    final_stake = max(min_stake, min(raw_stake, max_stake))
+    final_stake_str = str(int(final_stake)) # Integer N
+    
+    print(f"    [Execute] Stake Calculation: Bal={current_balance} -> Stake={final_stake_str}")
+
+    # 4. Enter Stake
+    stake_input = SelectorManager.get_selector("fb_match_page", "betslip_stake_input")
+    if stake_input and await page.locator(stake_input).count() > 0:
+            await page.locator(stake_input).first.fill(final_stake_str)
+            await page.keyboard.press("Enter")
+            await asyncio.sleep(1)
+    else:
+            print("    [Execute Error] Stake input not found!")
+            return
+
+    # 5. Place Bet
+    place_btn = SelectorManager.get_selector("fb_match_page", "betslip_place_bet_button")
+    if place_btn and await page.locator(place_btn).count() > 0:
+            print("    [Execute] Clicking Place Bet...")
+            await robust_click(page.locator(place_btn).first, page)
+            await asyncio.sleep(3)
+            
+            # 6. Confirm (if dialog)
+            confirm_btn = SelectorManager.get_selector("fb_match_page", "confirm_bet_button")
+            if confirm_btn and await page.locator(confirm_btn).count() > 0:
+                if await page.locator(confirm_btn).first.is_visible():
+                    print("    [Execute] Confirming bet...")
+                    await robust_click(page.locator(confirm_btn).first, page)
+                    await asyncio.sleep(5)
+            
+            # 7. Verification (Balance Check)
+            from ..navigator import extract_balance
+            post_balance = await extract_balance(page)
+            if post_balance < current_balance:
+                print(f"    [Execute Success] Bet Placed! New Balance: {post_balance}")
+                # Save Screenshot
+                from Helpers.utils import take_screenshot
+                await take_screenshot(page, "multi_success")
+            else:
+                 print("    [Execute Warning] Balance did not decrease. Bet might have failed.")
+    else:
+            print("    [Execute Error] Place button not found.")
+

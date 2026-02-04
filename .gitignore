@@ -78,12 +78,13 @@ coverage.xml
 .pytest_cache/
 
 # Mind (AI Models & Data) - Exclude platform-specific binaries
-Mind/model.gguf
-Mind/mmproj.gguf
+#Mind/model.gguf
+#Mind/mmproj.gguf
 Mind/*.exe
 Mind/*.dll
 Mind/llama-server
 Mind/llama.cpp/
+Mind/*.gguf
 
 # Chrome Profile Data
 DB/ChromeData*/

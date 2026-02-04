@@ -8,26 +8,34 @@ from Neo.intelligence import get_selector_auto, get_selector
 from Helpers.Site_Helpers.site_helpers import fs_universal_popup_dismissal
 import asyncio
 
-async def activate_standings_tab(page: Page, match_label: str = "Unknown") -> bool:
-    """Activates the Standings tab, ensuring popups are dismissed first."""
-    tab_selector = get_selector("match_page", "standings_tab") or "a[data-analytics-alias='stats-detail']"
-    try:
-        # Dismiss popups BEFORE clicking to avoid blockage
-        await fs_universal_popup_dismissal(page, "fs_match_page")
-
-        if await page.locator(tab_selector).is_visible(timeout=5000):
-            await page.click(tab_selector, force=True)
-            await page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(2.0)
-            return True
-        else:
-             print(f"      [Extractor] Standings tab not visible for {match_label}.")
-             return False
-    except Exception as e:
-        print(f"      [Extractor] Failed to activate Standings tab for {match_label}: {e}")
+async def activate_standings_tab(page: Page) -> bool:
+    """
+    Activates the Standings tab on the match page.
+    """
+    print("      [Extractor] Activating Standings tab...")
+    # Use the CORRECT key 'tab_standings' from 'fs_match_page' as defined in knowledge.json
+    tab_selector = get_selector("fs_match_page", "tab_standings")
+    
+    if not tab_selector:
+        print("      [Extractor] Error: 'tab_standings' selector not found in 'fs_match_page' context.")
         return False
 
-async def extract_standings_data(page: Page, match_label: str = "Unknown", context: str = "standings_tab") -> Dict[str, Any]:
+    try:
+        if await page.locator(tab_selector).is_visible(timeout=5000):
+            await page.click(tab_selector)
+            await page.wait_for_load_state("domcontentloaded")
+            await asyncio.sleep(2.0)
+            await fs_universal_popup_dismissal(page, "fs_standings_tab")
+            await asyncio.sleep(3.0)
+            return True
+        else:
+             print(f"      [Extractor] Standings tab selector '{tab_selector}' not visible.")
+             return False
+    except Exception as e:
+        print(f"      [Extractor] Failed to activate Standings tab: {e}")
+        return False
+
+async def extract_standings_data(page: Page, context: str = "fs_standings_tab") -> Dict[str, Any]:
     """
     Extracts essential standings data: position, team, stats, and league info.
     """
@@ -49,12 +57,8 @@ async def extract_standings_data(page: Page, match_label: str = "Unknown", conte
         "meta_breadcrumb_league": get_selector(context, "meta_breadcrumb_league") or ".tournamentHeader__league a",
     }
 
-    try:
-        from Helpers.constants import WAIT_FOR_LOAD_STATE_TIMEOUT
-        await page.wait_for_selector(selectors['standings_row'], timeout=WAIT_FOR_LOAD_STATE_TIMEOUT)
-    except TimeoutError:
-        print("      [Extractor] Warning: No standings table rows found.")
-        return {"standings": [], "region_league": "Unknown", "parsing_errors": ["Standings table not found."]}
+    from Helpers.constants import WAIT_FOR_LOAD_STATE_TIMEOUT
+    await page.wait_for_selector(selectors['standings_row'], timeout=WAIT_FOR_LOAD_STATE_TIMEOUT)
 
     js_code = r"""(selectors) => {
         const getText = (el, sel) => {

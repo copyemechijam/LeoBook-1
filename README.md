@@ -1,54 +1,95 @@
 # Leo
 **Manufacturer**: Emenike Chinenye James  
-**Powered by**: DeepMind x Grok 4 Hybrid Architecture
+**Powered by**: Grok 4, Qwen3-VL & Custom Llama Server
 
 
 """
-Leo v3.2: Elite Autonomous Betting Agent
-A production-grade "Observe, Decide, Act" system with hardened extraction and reliable betting execution.
+Leo v3.1: Elite Autonomous Betting Agent (Manufacturer: Emenike Chinenye James)
+
+A comprehensive AI-powered system that observes, analyzes, predicts, and executes betting strategies with advanced self-healing capabilities.
+
+The prime objective of this Agent is to ultimately handle all kinds of sports analysis, prediction and betting accurately, so the user would make active income from sports betting without constant interaction with betting and gambling platforms.
 
 OVERVIEW:
-Leo is an intelligent football prediction system that combines advanced data analysis, machine learning, and automated betting execution. The system features a hybrid AI architecture using local multimodal models for routine vision tasks and xAI's Grok 4 for high-precision selector discovery and complex UI mapping.
+Leo is an intelligent football prediction system that combines advanced data analysis, machine learning, and automated betting execution. The system features a hybrid AI architecture using local Qwen3-VL for routine vision tasks and xAI's Grok 4 for high-precision selector discovery and complex UI mapping.
 
-LATEST UPDATES (v3.2.0):
-- **Phase 1 Restoration**: Flashscore analysis reverted to the high-reliability "Old Method" (Day-only scan).
-- **Hardened Extraction**: Implementation of "Scorched Earth" CSS injection to permanently eliminate cookie banners and click-intercepting overlays.
-- **Harvest & Execute Strategy**: Phase 2 now splits into "Harvest Codes (Single)" and "Execute Multi-Bet (Pooled Codes)" for maximum slip stability.
-- **Defensive JS Layer**: Match data extraction now includes defensive JavaScript execution to handle missing selectors without crashing.
-- **Improved Navigator**: Optimized mobile context with adaptive resource blocking (restoring CSS for site stability).
+LATEST UPDATES (v3.1.0):
+- **Grok 4 Integration**: Primary engine for advanced visual UI analysis and HTML-to-Selector mapping.
+- **AI Selector Discovery**: Re-enabled and enhanced autonomous discovery of CSS selectors. Leo can now "see" and "learn" new selectors if websites change.
+- **Automated Recommendation System**: New `Scripts/recommend_bets.py` module that calculates match reliability based on historical accuracy and momentum.
+- **End-to-End Automation**: Flashscore analysis now automatically triggers the recommendation engine, saving today's best bets to `DB/RecommendedBets/`.
+- **Unified AI Interface**: Robust `ai_api_call` system with automatic rotation and retry logic for both local and cloud models.
 
 CORE ARCHITECTURE:
-- **Dual-Browser Engine**: Playwright-managed Chromium (Headless for Flashscore, Persistent Mobile for Football.com).
-- **RuleEngine (Neo/model.py)**: Deterministic logic combining xG, H2H, and standings data for high-confidence predictions.
-- **Persistent AI Discovery**: Auto-healing mechanism using Grok 4 to map visual elements to selectors on failure.
-- **Modular DB**: Absolute-pathed CSV system for decentralized match tracking and outcome review.
+- Dual-browser system (Flashscore + Football.com) with persistent login sessions.
+- **Local Inference Server**: Custom `run_split_model.bat` orchestrating the Qwen3-VL multimodal engine.
+- **Cloud Intelligence (Grok 4)**: High-level reasoning for selector auto-healing and complex state discovery.
+- **Modular Database System**: Optimized CSV-based storage with absolute pathing for cross-directory script execution.
+- **Self-Learning Engine**: Updates match reliability and learning weights in real-time.
 
 MAIN WORKFLOW:
-1. REVIEW (Phase 0):
-   - Monitors past matches in `site_matches.csv`.
-   - Evaluates performance and prints real-time accuracy reports.
+1. INFRASTRUCTURE INIT:
+   - **Windows**: `.\Mind\run_split_model.bat` (Local AI) or set `USE_GROK_API=true` in `.env`.
+   - **Linux/Codespaces**: `bash Mind/setup_linux_env.sh` -> `python Leo.py`.
+   - **Grok Config**: Ensure `GROK_API_KEY` is set for discovery features.
 
-2. ANALYSIS (Phase 1):
-   - Scrapes Flashscore using hardened multi-layered popup dismissal.
-   - Extracts H2H (10 matches) and Standings data.
-   - RuleEngine generates high-confidence predictions.
+2. DATA COLLECTION & ANALYSIS:
+   - **Flashscore Scraper**: Extracts daily fixture metadata.
+   - **RuleEngine (Neo/model.py)**: Generates predictions across 11+ markets.
+   - **Auto-Recommendations**: Immediately filters and scores the best bets after each analysis cycle.
 
-3. HARVEST (Phase 2a):
-   - Visits matches individually on Football.com.
-   - Generates and extracts single-match booking codes.
-   - Prevents betslip pollution by clearing slip after each match.
+3. AI DISCOVERY & HEALING:
+   - If a selector fails, **AI Selector Discovery** triggers.
+   - It captures a visual screenshot + HTML DOM.
+   - Grok 4 maps the visual element to the best CSS selector.
+   - `selectors_knowledge_base.json` is updated automatically.
 
-4. EXECUTE (Phase 2b):
-   - Pools harvested codes into a single multi-bet construction.
-   - Verifies balance and places the accumulator securely.
+4. BETTING EXECUTION:
+   - Match predictions with Football.com markets.
+   - Automated bet placement with intelligent stake management.
+
+5. OUTCOME REVIEW:
+   - Continuous monitoring of completed matches.
+   - Accuracy evaluation and weighting updates.
 
 SUPPORTED BETTING MARKETS:
-- 1X2, Double Chance, DNB
-- BTTS, Over/Under (0.5 - 5.5)
-- Correct Score, Clean Sheet
-- Combo Bets & Asian Handicap
+1. 1X2 (Home/Away/Draw)
+2. Double Chance (Home or Draw, Away, etc.)
+3. Draw No Bet
+4. Both Teams To Score (Yes/No)
+5. Over/Under Goals (0.5 - 5.5)
+6. Goal Ranges
+7. Correct Score
+8. Clean Sheet
+9. Asian Handicap
+10. Combo Bets
+11. Team Over/Under
+
+SYSTEM COMPONENTS:
+
+1. Leo.py (Main Controller)
+   - Orchestrates workflow and manages browser sessions.
+
+2. Neo/ (The Brain - AI Engine)
+   - `visual_analyzer.py`: Orchestrates discovery and visual inventory.
+   - `selector_mapping.py`: **[NEW]** Grok 4 mapping logic.
+   - `intelligence.py`: Unified AI interface for the system.
+   - `model.py`: Core prediction rules.
+
+3. Scripts/ (Tools)
+   - `recommend_bets.py`: **[NEW]** Advanced betting recommendation engine.
+   - `repair_predictions.py`: Maintenance tool for outcome evaluation.
+
+4. DB/ (Data Storage)
+   - `RecommendedBets/`: **[NEW]** Storage for daily automated recommendations.
+   - `predictions.csv`: Core prediction database.
+   - `knowledge.json`: Persistent selector memory.
+
+5. Helpers/ (Utility Systems)
+   - `llm_matcher.py`: Multi-model team name resolution.
+   - `db_helpers.py`: **[UPDATED]** Robust absolute pathing operations.
 
 MAINTENANCE:
-- Recommendations are auto-generated after every Phase 1 cycle in `DB/RecommendedBets/`.
-- System logs exhaustive debug snapshots (HTML/PNG) in `Logs/Error` on failure.
+- Monitor `Log/` for AI status and selector discovery successes.
+- Recommendations are saved as `.txt` files in `DB/RecommendedBets/` after every cycle.
 """

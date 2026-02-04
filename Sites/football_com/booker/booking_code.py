@@ -1,139 +1,185 @@
 """
-Single Match Booking Module (Phase 2a: Harvest)
-Responsible for booking a single match to extract a booking code.
-Focuses on reliability, retries, and clean state.
+Booking Code Extractor
+Handles the specific logic for Phase 2a: Harvest.
+Visits a match, books a single bet, extracts the code, and saves it.
 """
 
 import asyncio
 import re
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 from playwright.async_api import Page
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
-import logging
-
-from Helpers.Site_Helpers.site_helpers import get_main_frame
-from Helpers.utils import log_error_state
 from Neo.selector_manager import SelectorManager
-from Neo.intelligence import fb_universal_popup_dismissal as neo_popup_dismissal
 from .ui import robust_click
+from .slip import force_clear_slip
+from Helpers.DB_Helpers.db_helpers import update_site_match_status
+
+async def book_single_match(page: Page, match: Dict, prediction: Dict) -> bool:
+    """
+    Core function for Phase 2a (Harvest).
+    1. Force clears slip.
+    2. Navigates to match URL.
+    3. Finds and selects the outcome (verifying min odds).
+    4. Clicks "Book Bet".
+    5. Extracts code & URL.
+    6. Saves to CSV.
+    """
+    url = match.get('url')
+    site_match_id = match.get('site_match_id')
+
+    print(f"\n   [Harvest] Processing match: {match.get('home_team')} vs {match.get('away_team')}")
+    
+    # 1. Clear Slip (Critical)
+    try:
+        await force_clear_slip(page)
+    except Exception as e:
+        print(f"    [Harvest Error] Slip clear failed: {e}")
+        return False
+
+    # 2. Navigate
+    try:
+        if page.url != url:
+            await page.goto(url, timeout=60000, wait_until='domcontentloaded')
+        # Wait for meaningful content
+        await page.wait_for_selector(SelectorManager.get_selector_strict("fb_match_page", "market_group_header"), timeout=15000)
+    except Exception as e:
+        print(f"    [Harvest Error] Navigation failed: {e}")
+        return False
+
+    # 3. Select Outcome
+    # This requires logic to map prediction -> market -> outcome
+    # For now, we assume '1X2' or 'Double Chance' based on simple prediction mapping
+    # TODO: Refine this mapping logic to be more generic
+    pred_type = prediction.get('prediction', 'SKIP')
+    
+    outcome_found = await _select_outcome(page, pred_type)
+    if not outcome_found:
+        print(f"    [Harvest] Pred '{pred_type}' outcome not found or odds too low.")
+        update_site_match_status(site_match_id, status="failed", details=f"Outcome {pred_type} not found/low odds")
+        return False
+
+    # 4. Book Bet
+    success = await _perform_booking_action(page, site_match_id)
+    
+    # 5. Cleanup
+    await force_clear_slip(page) # Reset for next match
+
+    return success
+
+
 from .mapping import find_market_and_outcome
-from .slip import force_clear_slip, get_bet_slip_count
 
+async def expand_collapsed_market(page: Page, market_name: str):
+    """If a market is found but collapsed, expand it."""
+    try:
+        header_sel = SelectorManager.get_selector("fb_match_page", "market_header")
+        if header_sel:
+             target_header = page.locator(header_sel).filter(has_text=market_name).first
+             if await target_header.count() > 0:
+                 print(f"    [Market] Clicking market header for '{market_name}' to ensure expansion...")
+                 await robust_click(target_header, page)
+                 await asyncio.sleep(1)
+    except Exception as e:
+        print(f"    [Market] Expansion failed: {e}")
 
-# --- RETRY CONFIGURATION ---
-def log_retry_attempt(retry_state):
-    print(f"      [Booking Retry] Attempt {retry_state.attempt_number} failed. Retrying...")
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1.5, min=3, max=15),
-    retry=retry_if_exception_type(Exception),
-    before_sleep=log_retry_attempt
-)
-async def book_single_match(page: Page, match_data: Dict) -> Tuple[Optional[str], Optional[str]]:
+async def _select_outcome(page: Page, prediction: Dict) -> bool:
     """
-    Orchestrates the booking of a single match.
-    Returns: (booking_code, booking_url) or (None, None)
+    Robust outcome selection:
+    1. Maps prediction -> generic market/outcome names.
+    2. Searches for market using site search.
+    3. Finds outcome button.
+    4. Clicks and verifies selection.
     """
-    booking_code = None
-    booking_url = None
-    
-    match_label = f"{match_data.get('home_team')} vs {match_data.get('away_team')}"
-    match_url = match_data.get('url')
-    
-    if not match_url:
-        print(f"    [Skip] No URL for {match_label}")
-        return None, None
-
-    print(f"\n   [Harvest] Booking: {match_label}")
+    # 1. Map Prediction
+    m_name, o_name = await find_market_and_outcome(prediction)
+    if not m_name:
+        print(f"    [Harvest Error] No mapping for pred: {prediction.get('prediction')}")
+        return False
 
     try:
-        # Pre-condition: Clean slip
-        await force_clear_slip(page)
-
-        # 1. Navigation
-        await page.goto(match_url, wait_until='domcontentloaded', timeout=45000)
-        await asyncio.sleep(2)
-        await neo_popup_dismissal(page, match_url)
-        
-        # 2. Market Mapping
-        m_name, o_name = await find_market_and_outcome(match_data)
-        if not m_name:
-            print(f"    [Skip] Mapping failed for {match_label}")
-            return None, None
-
-        # 3. Search & Select
+        # 2. Search for Market
+        # Reuse robust searching logic from placement.py
         search_icon = SelectorManager.get_selector_strict("fb_match_page", "search_icon")
         search_input = SelectorManager.get_selector_strict("fb_match_page", "search_input")
-            
-        if search_icon and search_input and await page.locator(search_icon).first.is_visible():
-             await robust_click(page.locator(search_icon).first, page)
-             await page.locator(search_input).first.fill(m_name)
-             await page.keyboard.press("Enter")
-             await asyncio.sleep(1.5)
-
-        # Heuristic for outcome button
-        outcome_found = False
-        initial_count = await get_bet_slip_count(page)
         
-        # Try finding button by exact text or within market container
-        potential_selectors = [
-            f"button:has-text('{o_name}')",
-            f"div[role='button']:has-text('{o_name}')",
-            f"span:text-is('{o_name}')",
-            f".m-outcome:has-text('{o_name}')"
-        ]
-        
-        for sel in potential_selectors:
-            btn = page.locator(sel).first
-            if await btn.count() > 0 and await btn.is_visible():
-                print(f"    [Selection] Attempting click on '{o_name}' via '{sel}'")
-                if await robust_click(btn, page):
-                    await asyncio.sleep(1.5)
-                    if await get_bet_slip_count(page) > initial_count:
-                        outcome_found = True
-                        break
-        
-        if not outcome_found:
-             print(f"    [Fail] Outcome '{o_name}' not added to slip.")
-             return None, None
-            
-        # 4. Book Bet
-        book_btn_sel = SelectorManager.get_selector_strict("fb_match_page", "book_bet_button") or "button:has-text('Book a bet')" 
-        book_btn = page.locator(book_btn_sel).first
-        
-        if await book_btn.count() > 0 and await book_btn.is_visible():
-            await robust_click(book_btn, page)
-            print("    [Action] Clicked 'Book a bet'")
-            
-            # 5. Extract Code
-            code_display_sel = SelectorManager.get_selector_strict("fb_match_page", "booking_code_display") or "div.booking-code-text"
-            try:
-                # Use a combined selector for common code displays
-                await page.wait_for_selector(f"{code_display_sel}, .m-booking-code", timeout=12000)
-                code_el = page.locator(f"{code_display_sel}, .m-booking-code").first
-                booking_code = (await code_el.inner_text()).strip()
-                print(f"    [Success] Booking Code: {booking_code}")
+        if search_icon and search_input:
+            if await page.locator(search_icon).count() > 0:
+                await robust_click(page.locator(search_icon).first, page)
+                await asyncio.sleep(0.5)
                 
-                # Cleanup: Dismiss modal
-                await page.keyboard.press("Escape")
-                close_btn = page.locator(".m-dialog-close, .m-modal-close").first
-                if await close_btn.count() > 0:
-                    await close_btn.click()
-            except Exception as e:
-                print(f"    [Warning] Code extraction error: {e}")
-        else:
-            print("    [Error] 'Book a bet' button not found.")
+                await page.locator(search_input).fill(m_name)
+                # Wait for search results
+                await asyncio.sleep(1.5)
+                
+                # Expand if needed
+                await expand_collapsed_market(page, m_name)
+
+                # 3. Find Outcome Button
+                # Strategy A: Button with precise text
+                outcome_btn = page.locator(f"button:text-is('{o_name}'), div[role='button']:text-is('{o_name}')").first
+                
+                if await outcome_btn.count() > 0 and await outcome_btn.is_visible():
+                        print(f"    [Selection] Found outcome button '{o_name}'")
+                        await robust_click(outcome_btn, page)
+                        return True
+                else:
+                        # Strategy B: Row based fallback
+                        row_sel = SelectorManager.get_selector("fb_match_page", "match_market_table_row")
+                        if row_sel:
+                            target_row = page.locator(row_sel).filter(has_text=o_name).first
+                            if await target_row.count() > 0:
+                                print(f"    [Selection] Found outcome row for '{o_name}'")
+                                await robust_click(target_row, page)
+                                return True
             
-        # Post-condition: Clean slip
-        await force_clear_slip(page)
-        
-        return booking_code, None 
+                print(f"    [Harvest Failure] Outcome '{o_name}' not found after search.")
+                return False
+            else:
+                print("    [Harvest Error] Search icon not found/visible.")
+                return False
+        else:
+            print("    [Harvest Error] Search selectors missing.")
+            return False
 
     except Exception as e:
-        print(f"    [Booking Error] {match_label}: {e}")
-        await log_error_state(page, f"harvest_fail_{match_label.replace(' ', '_')}", e)
-        # Attempt emergency clear
-        try: await force_clear_slip(page)
-        except: pass
-        raise e 
+        print(f"    [Harvest Error] Selection logic failed: {e}")
+        return False
+
+
+async def _perform_booking_action(page: Page, site_match_id: str) -> bool:
+    """Clicks Book Bet, waits for modal, extracts code."""
+    book_btn_sel = SelectorManager.get_selector_strict("fb_match_page", "book_bet_button")
+    
+    try:
+        # Click Book Bet
+        if await page.locator(book_btn_sel).count() > 0:
+            await robust_click(page.locator(book_btn_sel).first, page)
+            
+            # Wait for Modal
+            modal_sel = SelectorManager.get_selector_strict("fb_match_page", "booking_code_modal")
+            await page.wait_for_selector(modal_sel, timeout=10000)
+            
+            # Extract Code
+            code_sel = SelectorManager.get_selector_strict("fb_match_page", "booking_code_text")
+            code_text = await page.locator(code_sel).first.inner_text()
+            
+            print(f"    [Harvest Success] Code Found: {code_text}")
+            
+            # Save
+            update_site_match_status(
+                site_match_id, 
+                status="booked", 
+                booking_code=code_text, 
+                booking_url=f"https://www.football.com/ng/m?shareCode={code_text}"
+            )
+            
+            # Dismiss Modal
+            close_sel = SelectorManager.get_selector_strict("fb_match_page", "modal_close_button")
+            if await page.locator(close_sel).count() > 0:
+                await page.locator(close_sel).first.click()
+            
+            return True
+            
+    except Exception as e:
+        print(f"    [Harvest Error] Booking action failed: {e}")
+        
+    return False

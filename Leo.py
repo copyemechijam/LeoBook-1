@@ -33,8 +33,40 @@ from Helpers.utils import Tee, LOG_DIR
 CYCLE_WAIT_HOURS = 6
 PLAYWRIGHT_DEFAULT_TIMEOUT = 3600000 
 
+
 # Global process handle for cleanup
 server_process = None
+
+# --- STATE MANAGEMENT ---
+state = {
+    "cycle_start_time": None, # Will be set at start of cycle
+    "cycle_count": 0,
+    "current_phase": "Startup",
+    "last_action": "Init",
+    "next_expected": "Startup Checks",
+    "why_this_step": "System initialization",
+    "expected_outcome": "Ready to start",
+    "ai_server_ready": False,
+    "llm_needed_for_this_cycle": False, # Flag to trigger AI server start
+    "pending_count": 0,
+    "booked_this_cycle": 0,
+    "failed_this_cycle": 0,
+    "current_balance": 0.0,
+    "error_log": []
+}
+
+def log_state(phase=None, action=None, next_step=None, why=None, expect=None):
+    """Updates and prints the current system state."""
+    global state
+    if phase: state["current_phase"] = phase
+    if action: state["last_action"] = action
+    if next_step: state["next_expected"] = next_step
+    if why: state["why_this_step"] = why
+    if expect: state["expected_outcome"] = expect
+    
+    print(f"   [STATE] {state['current_phase']} | Done: {state['last_action']} | Next: {state['next_expected']} | Why: {state['why_this_step']}")
+
+
 
 def is_server_running(base_url="http://127.0.0.1:8080"):
     """Check if the AI server is responsive and model is loaded."""
@@ -176,45 +208,49 @@ def shutdown_server():
 async def main():
     """
     The main execution loop for Leo.
-    It continuously observes (scrapes data), decides (analyzes), and acts (books bets).
+    Adheres to the "Observe, Decide, Act" algorithm with strict phases.
     """
     # 1. Initialize all database files (CSVs)
-    print("    --- LEO: Initializing Databases ---      ")
+    log_state(phase="Init", action="Initializing Databases")
     init_csvs()
 
     async with async_playwright() as p:
         while True:
             try:
-                print(f"\n      --- LEO: Starting new cycle at {dt.now().strftime('%Y-%m-%d %H:%M:%S')} --- ")
+                state["cycle_count"] += 1
+                state["cycle_start_time"] = dt.now()
+                log_state(phase="Cycle Start", action=f"Starting Cycle #{state['cycle_count']}", next_step="Phase 0: Review")
 
-                # 0. Ensure AI Server is Running
-                start_ai_server()
+                # NOTE: AI Server is NOT started here anymore. 
+                # It is lazy-loaded in Phase 2 only if needed.
 
                 # --- PHASE 0: REVIEW (Observe past actions) ---
-                print("\n   [Phase 0] Checking for past matches to review...")
+                log_state(phase="Phase 0", action="Reviewing Outcomes", next_step="Accuracy Report")
                 from Helpers.DB_Helpers.review_outcomes import run_review_process
-                #await run_review_process(p)
+                await run_review_process(p)
 
                 # Print prediction accuracy report
-                print("   [Phase 0] Analyzing prediction accuracy across all reviewed matches...")
+                log_state(phase="Phase 0", action="Generating Accuracy Report", next_step="Phase 1: Analysis")
                 from Helpers.DB_Helpers.prediction_accuracy import print_accuracy_report
-                #print_accuracy_report()
-                #print("   [Phase 0] Accuracy analysis complete.")
+                print_accuracy_report()
 
                 # --- PHASE 1: ANALYSIS (Observe and Decide) ---
-                print("\n   [Phase 1] Starting analysis engine (Flashscore)...")
+                log_state(phase="Phase 1", action="Starting Flashscore Analysis", next_step="Phase 2: Booking")
+                # This phase initiates the headless browser and extracts specific target data
                 await run_flashscore_analysis(p)
 
                 # --- PHASE 2: BOOKING (Act) ---
-                print("\n   [Phase 2] Starting booking process (Football.com)...")
+                log_state(phase="Phase 2", action="Starting Booking Process", next_step="Sleep")
+                # This phase now strictly follows Harvest -> Execute flow
                 await run_football_com_booking(p)
 
                 # --- PHASE 3: SLEEP (The wait) ---
-                print("\n   --- LEO: Cycle Complete. ---")
+                log_state(phase="Phase 3", action="Cycle Complete", next_step=f"Sleeping {CYCLE_WAIT_HOURS}h")
                 print(f"Sleeping for {CYCLE_WAIT_HOURS} hours until the next cycle...")
                 await asyncio.sleep(CYCLE_WAIT_HOURS * 3600)
 
             except Exception as e:
+                state["error_log"].append(f"{dt.now()}: {e}")
                 print(f"[ERROR] An unexpected error occurred in the main loop: {e}")
                 print("Restarting cycle after a short delay...")
                 await asyncio.sleep(60) # Wait for 60 seconds before retrying

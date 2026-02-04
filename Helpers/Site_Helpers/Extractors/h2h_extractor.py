@@ -14,16 +14,23 @@ from Helpers.Site_Helpers.site_helpers import fs_universal_popup_dismissal
 import asyncio
 
 async def activate_h2h_tab(page: Page) -> bool:
-    """Activates the H2H tab, ensuring popups are dismissed first."""
-    tab_selector = get_selector("match_page", "h2h_tab") or "a[data-analytics-alias='h2h']"
-    try:
-        # Dismiss popups BEFORE clicking to avoid blockage
-        await fs_universal_popup_dismissal(page, "fs_match_page")
+    """
+    Activates the H2H tab on the match page.
+    """
+    print("      [Extractor] Activiting H2H tab...")
+    # Use the CORRECT key 'tab_h2h' from 'fs_match_page' as defined in knowledge.json
+    tab_selector = get_selector("fs_match_page", "tab_h2h")
+    
+    if not tab_selector:
+        print("      [Extractor] Error: 'tab_h2h' selector not found in 'fs_match_page' context.")
+        return False
 
+    try:
         if await page.locator(tab_selector).is_visible(timeout=5000):
-            await page.click(tab_selector, force=True)
+            await page.click(tab_selector)
             await page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
+            await fs_universal_popup_dismissal(page, "fs_h2h_tab") # Use specific context popup dismissal if needed, or generic
             return True
         else:
              print(f"      [Extractor] H2H tab selector '{tab_selector}' not visible.")
@@ -32,7 +39,8 @@ async def activate_h2h_tab(page: Page) -> bool:
         print(f"      [Extractor] Failed to activate H2H tab: {e}")
         return False
 
-async def extract_h2h_data(page: Page, home_team_main: str, away_team_main: str, context: str = "h2h_tab") -> Dict[str, Any]:
+
+async def extract_h2h_data(page: Page, home_team_main: str, away_team_main: str, context: str = "fs_h2h_tab") -> Dict[str, Any]:
     """
     Extracts H2H data from the page using AI-generated selectors from knowledge base.
     Eliminates hardcoded CSS classes for robust scraping.
@@ -46,7 +54,7 @@ async def extract_h2h_data(page: Page, home_team_main: str, away_team_main: str,
         "h2h_section_mutual": get_selector(context, "h2h_section_mutual") or ".h2h__section:nth-of-type(3)",
         "h2h_section_title": get_selector(context, "h2h_section_title") or ".h2h__sectionHeader",
         "h2h_row_general": get_selector(context, "h2h_row_general") or ".h2h__row",
-        "h2h_row_link": get_selector(context, "h2h_row_link") or "a", # Default to any anchor
+        "h2h_row_link": get_selector(context, "h2h_row_link"),
         "h2h_row_date": get_selector(context, "h2h_row_date") or ".h2h__date",
         "h2h_row_league_icon": get_selector(context, "h2h_row_league_icon") or ".h2h__eventIcon",
         "h2h_row_participant_home": get_selector(context, "h2h_row_participant_home") or ".h2h__homeParticipant",
@@ -61,12 +69,8 @@ async def extract_h2h_data(page: Page, home_team_main: str, away_team_main: str,
         "meta_breadcrumb_league": get_selector(context, "meta_breadcrumb_league") or ".tournamentHeader__league a",
     }
 
-    try:
-        from Helpers.constants import WAIT_FOR_LOAD_STATE_TIMEOUT
-        await page.wait_for_selector(selectors['h2h_row_general'], timeout=WAIT_FOR_LOAD_STATE_TIMEOUT)
-    except TimeoutError:
-        print(f"      [Extractor] Warning: No H2H rows ('{selectors['h2h_row_general']}') found. Extraction will be empty.")
-        return {"home_last_10_matches": [], "away_last_10_matches": [], "head_to_head": [], "parsing_errors": ["H2H rows not found on page."], "home_team": home_team_main, "away_team": away_team_main, "region_league": "Unknown"}
+    from Helpers.constants import WAIT_FOR_LOAD_STATE_TIMEOUT
+    await page.wait_for_selector(selectors['h2h_row_general'], timeout=WAIT_FOR_LOAD_STATE_TIMEOUT)
 
     js_code = r"""(data) => {
         const { selectors, home_team_main, away_team_main } = data;
@@ -98,7 +102,7 @@ async def extract_h2h_data(page: Page, home_team_main: str, away_team_main: str,
             const rows = section.querySelectorAll(selectors.h2h_row_general);
             rows.forEach(row => {
 
-                let linkEl = row.querySelector(selectors.h2h_row_link);
+                let linkEl = selectors.h2h_row_link ? row.querySelector(selectors.h2h_row_link) : null;
                 try {
 
                     // Check if row itself is clickable

@@ -1,6 +1,6 @@
 curl https://api.x.ai/v1/chat/completions \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer [PROTECTED_API_KEY]" \
+    -H "Authorization: Bearer <REDACTED>" \
     -d '{
       "messages": [
         {
@@ -17,4 +17,4 @@ curl https://api.x.ai/v1/chat/completions \
       "temperature": 0
     }'
     
-    [PROTECTED_API_KEY]
+    <REDACTED>

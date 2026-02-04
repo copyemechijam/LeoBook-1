@@ -10,39 +10,42 @@ from .ui import robust_click
 from ..navigator import extract_balance
 
 WITHDRAWALS_CSV = Path("DB/withdrawals.csv")
-MIN_WITHDRAWAL = 1000
-MAX_WITHDRAWAL = 999999
 
-async def withdraw_amount(page: Page, amount: str = "100", pin: str = "1234", reason: str = "40% of bet win"):
-    """
-    Full withdrawal flow:
-    1. Enter amount -> Submit
-    2. Extract data from confirmation dialog
-    3. Confirm
-    4. Enter PIN
-    5. Wait for "Pending Request" dialog
-    6. Verify balance decreased by exactly `amount`
-    7. If successful -> save to withdrawals.csv
-    """
-    # --- Validation ---
-    try:
-        amount_float = float(amount.replace(',', ''))
-        if amount_float < MIN_WITHDRAWAL:
-            print(f"[Withdraw] Aborting: Amount {amount} is below minimum {MIN_WITHDRAWAL}")
-            return
-        if amount_float > MAX_WITHDRAWAL:
-             print(f"[Withdraw] Aborting: Amount {amount} exceeds maximum {MAX_WITHDRAWAL}")
-             return
-    except ValueError:
-        print(f"[Withdraw] Aborting: Invalid amount format '{amount}'")
-        return
 
-    pre_balance = await extract_balance(page)
-    print(f"[Withdraw] Starting. Pre-balance: {pre_balance}")
+async def check_and_perform_withdrawal(page: Page, current_balance: float, last_win_amount: float = 0):
+    """
+    Evaluates withdrawal rules and executes if valid.
+    Rules:
+    1. Min withdrawal: N500
+    2. Max withdrawal: Min(30% of Total Balance, 50% of Latest Win)
+       (If last_win_amount is 0/unknown, use 30% balance rule only)
+    """
+    MIN_WITHDRAWAL = 500
     
-    if pre_balance < amount_float:
-         print(f"[Withdraw] Aborting: Insufficient balance ({pre_balance}) for withdrawal of {amount}")
-         return
+    # 1. Calculate Candidate Amounts
+    cand_balance_rule = current_balance * 0.30
+    cand_win_rule = last_win_amount * 0.50 if last_win_amount > 0 else cand_balance_rule
+    
+    # Take the smaller of the two caps (Conservative approach)
+    max_allowable = min(cand_balance_rule, cand_win_rule)
+    
+    # Final Amount Check
+    if max_allowable < MIN_WITHDRAWAL:
+        print(f"    [Withdrawal] Skipped. Max allowable (N{max_allowable:.2f}) < Min Limit (N{MIN_WITHDRAWAL})")
+        return False
+        
+    final_amount = int(max_allowable) # Withdrawals usually integer
+    print(f"    [Withdrawal] Initiating withdrawal of N{final_amount} (Rules: 30% Bal or 50% Win)")
+    
+    return await _execute_withdrawal_flow(page, str(final_amount))
+
+async def _execute_withdrawal_flow(page: Page, amount: str = "100", pin: str = "1234"):
+    """
+    Internal flow: Enter amount -> Confirm -> PIN -> Verify
+    """
+    pre_balance = await extract_balance(page)
+    print(f"    [Withdraw Flow] Starting. Pre-balance: {pre_balance}")
+
 
     # --- Stage 1: Enter amount & submit ---
     amount_sel = SelectorManager.get_selector("fb_withdraw_page", "amount_input")

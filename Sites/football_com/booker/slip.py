@@ -27,116 +27,98 @@ async def get_bet_slip_count(page: Page) -> int:
 
     return 0
 
-async def clear_bet_slip(page: Page):
-    """
-    Ensure the bet slip is empty before starting a new session using dynamic selectors.
-    Aggressively tries to open slip and clear it.
-    """
-    # print("    [Slip] Checking if bet slip needs clearing...")
-    try:
-        count = await get_bet_slip_count(page)
-        if count > 0:
-            print(f"    [Slip] {count} bets detected. Opening slip to clear...")
 
-            # 1. Open Slip
-            # Try multiple trigger selectors from knowledge.json keys
+class FatalSessionError(Exception):
+    """Raised when the session is irretrievably broken (e.g. cannot clear slip)."""
+    pass
+
+async def force_clear_slip(page: Page, retry_count: int = 3):
+    """
+    AGGRESSIVELY ensures the bet slip is empty. 
+    Crucial for Phase 2 "Harvest" strategy.
+    
+    Logic:
+    1. Check count.
+    2. If > 0, open slip -> Remove All -> Confirm -> Close.
+    3. Verify count == 0.
+    4. If failed, RETRY.
+    5. If all retries fail, DELETE STORAGE & RAISE FATAL ERROR.
+    """
+    for attempt in range(retry_count):
+        count = await get_bet_slip_count(page)
+        if count == 0:
+            # print(f"    [Slip] Slip clean (Attempt {attempt+1}).")
+            return
+
+        print(f"    [Slip] {count} bets detected (Attempt {attempt+1}/{retry_count}). Clearing...")
+
+        try:
+            # 1. Open Slip (Try multiple triggers)
             trigger_keys = ["slip_trigger_button", "betslip_trigger_by_attribute", "bet_slip_fab_icon_button"]
             slip_opened = False
             
             for key in trigger_keys:
                 sel = SelectorManager.get_selector_strict("fb_match_page", key) or SelectorManager.get_selector_strict("fb_global", key)
+                # Check visibility aggressively
                 if sel and await page.locator(sel).count() > 0 and await page.locator(sel).first.is_visible():
-                     await robust_click(page.locator(sel).first, page)
-                     slip_opened = True
-                     await asyncio.sleep(2)
-                     break
+                        await robust_click(page.locator(sel).first, page)
+                        slip_opened = True
+                        await asyncio.sleep(1.5)
+                        break
             
             if not slip_opened:
                 print("    [Slip] Warning: Could not open bet slip to clear.")
-                return
-
+                # Don't return, try finding 'Remove All' anyway in case it's already open
+            
             # 2. Click Remove All
-            clear_sel = SelectorManager.get_selector_strict("fb_match_page", "betslip_remove_all")
-            if clear_sel and await page.locator(clear_sel).count() > 0:
+            # Try finding it in different contexts if needed
+            clear_sel = SelectorManager.get_selector("fb_match_page", "betslip_remove_all")
+            if clear_sel and await page.locator(clear_sel).count() > 0 and await page.locator(clear_sel).first.is_visible():
                 await page.locator(clear_sel).first.click()
                 await asyncio.sleep(1)
                 
                 # 3. Confirm Removal (if dialog appears)
-                confirm_sel = SelectorManager.get_selector_strict("fb_match_page", "confirm_bet_button")
+                confirm_sel = SelectorManager.get_selector("fb_match_page", "confirm_bet_button")
                 if confirm_sel and await page.locator(confirm_sel).count() > 0 and await page.locator(confirm_sel).first.is_visible():
                     await page.locator(confirm_sel).first.click()
                     await asyncio.sleep(1)
                 
-                print("    [Slip] Clicked remove all.")
+                print("    [Slip] Cliicked remove all.")
             else:
-                 print("    [Slip] Remove all button not found.")
+                 print("    [Slip] 'Remove All' button not found (Slip might be closed or empty?)")
 
-            # 4. Verify Cleared
-            new_count = await get_bet_slip_count(page)
-            if new_count == 0:
-                print("    [Slip] Successfully cleared bets.")
-            else:
-                print(f"    [Slip] Warning: Slip still has {new_count} bets after clear attempt.")
-
-            # 5. Close Slip
+            # 4. Close Slip (Important to reset UI state)
             try:
                 await page.keyboard.press("Escape")
                 
-                # Check for explicit close button
-                close_icon = SelectorManager.get_selector_strict("fb_match_page", "betslip_close_button")
+                close_icon = SelectorManager.get_selector("fb_match_page", "betslip_close_button")
                 if close_icon and await page.locator(close_icon).count() > 0:
-                     await page.locator(close_icon).first.click()
+                        if await page.locator(close_icon).first.is_visible():
+                            await page.locator(close_icon).first.click()
             except:
                 pass
-        else:
-            # print("    [Slip] Bet slip is already empty.")
-            pass
             
-    except Exception as e:
-        print(f"    [Slip Warning] Failed to clear slip: {e}")
-
-async def force_clear_slip(page: Page):
-    """
-    Aggressively ensures the bet slip is empty. 
-    Retries clearing logic 3 times. 
-    Escalation: If slip cannot be cleared, it deletes the session data and raises Exception.
-    """
-    import os
-    import shutil
-    from pathlib import Path
-
-    for attempt in range(3):
-        try:
-            count = await get_bet_slip_count(page)
-            if count == 0:
-                return # Successfully cleared
-            
-            print(f"    [Slip] Force Clear Attempt {attempt+1}/3: Found {count} items.")
-            await clear_bet_slip(page)
-            
-            # Double check
-            await asyncio.sleep(1.0)
-            if await get_bet_slip_count(page) == 0:
-                print("    [Slip] Force clear successful.")
-                return
+            await asyncio.sleep(1)
 
         except Exception as e:
             print(f"    [Slip Error] Attempt {attempt+1} failed: {e}")
-            await asyncio.sleep(2.0)
-    
-    # --- ESCALATION LOGIC ---
-    print("    [CRITICAL] Failed to clear bet slip. Escalating: Deleting Session Data.")
-    user_data_dir = Path("DB/ChromeData_v3")
-    if user_data_dir.exists():
-        try:
-            # We can't delete it while browser is open in this process, 
-            # but we can mark it for deletion or try to close context first.
-            await page.context.close()
-            # On some OS, we might need to wait for process to fully release
-            await asyncio.sleep(2)
-            shutil.rmtree(user_data_dir, ignore_errors=True)
-            print("    [System] Chrome data directory deleted for clean restart.")
-        except Exception as del_e:
-            print(f"    [System Error] Could not delete data dir: {del_e}")
 
-    raise Exception("CRITICAL: Failed to clear bet slip after 3 attempts. Session wiped.")
+    # --- FINAL CHECK ---
+    final_count = await get_bet_slip_count(page)
+    if final_count > 0:
+        print(f"!!! [CRITICAL] Slip Force-Clear Failed. {final_count} bets remain. !!!")
+        print("!!! [CRITICAL] Deleting storage state and triggering restart. !!!")
+        
+        # Delete storage state to force fresh login next time
+        try:
+             import os
+             if os.path.exists("storage_state.json"):
+                 os.remove("storage_state.json")
+                 print("    [System] storage_state.json deleted.")
+        except Exception as e:
+            print(f"    [System] Failed to delete storage: {e}")
+
+        raise FatalSessionError("Slip stuck dirty after 3 retries. Session invalidated.")
+    else:
+        print("    [Slip] Cleaned successfully.")
+

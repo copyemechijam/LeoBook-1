@@ -54,7 +54,8 @@
         "h2h_badge_draw": ".h2h__icon [title=\"Draw\"]",
         "h2h_badge_loss": ".h2h__icon [title=\"Loss\"]",
         "meta_breadcrumb_country": ".tournamentHeader__country",
-        "meta_breadcrumb_league": ".tournamentHeader__league a"
+        "meta_breadcrumb_league": ".tournamentHeader__league a",
+        "h2h_show_more_button": ".h2h__showMore"
     },
     "fs_standings_tab": {
         "standings_row": ".ui-table__row",
@@ -392,10 +393,10 @@
         "pin_confirm_disabled": ".af-button.af-button--success.is-disabled",
         "forgot_pin_link": ".green .size-16 span[data-cms-key=\"forgot_pin\"]",
         "success_dialog_wrapper": ".dialog-wrapper .cms-dialog-content",
-        "success_title":          ".cms-dialog-content .head h1",                     
-        "success_message":        ".cms-dialog-content .body div",
+        "success_title": ".cms-dialog-content .head h1",
+        "success_message": ".cms-dialog-content .body div",
         "success_transaction_btn": ".cms-dialog-content .footer .btn:has-text(\"Transaction\")",
-        "success_home_btn":       ".cms-dialog-content .footer .btn:has-text(\"Home\")",
+        "success_home_btn": ".cms-dialog-content .footer .btn:has-text(\"Home\")",
         "balance_after_withdraw": ".navbar-balance > span:not(.currency)"
     },
     "fb_login_page": {
