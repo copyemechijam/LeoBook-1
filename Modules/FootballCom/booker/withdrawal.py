@@ -9,7 +9,7 @@ from pathlib import Path
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from Core.Intelligence.selector_manager import SelectorManager
-from .ui import robust_click
+# from .ui import robust_click (Removed)
 # Adjusted import: navigator is in the parent directory (Modules/FootballCom)
 from ..navigator import extract_balance
 from Data.Access.db_helpers import log_audit_event
@@ -82,7 +82,7 @@ async def _execute_withdrawal_flow(page: Page, amount: str = "100", pin: str = "
 
     submit_sel = SelectorManager.get_selector("fb_withdraw_page", "withdraw_submit_button")
     await page.wait_for_selector(f"{submit_sel}:not(.is-disabled)", timeout=15000)
-    await robust_click(page.locator(submit_sel).first, page)
+    await page.locator(submit_sel).first.click()
 
     # --- Stage 2: Confirmation dialog - extract data first ---
     await page.wait_for_selector(
@@ -112,7 +112,7 @@ async def _execute_withdrawal_flow(page: Page, amount: str = "100", pin: str = "
 
     # Confirm
     confirm_btn_sel = SelectorManager.get_selector("fb_withdraw_page", "confirm_confirm_button")
-    await robust_click(page.locator(confirm_btn_sel).first, page)
+    await page.locator(confirm_btn_sel).first.click()
 
     # --- Stage 3: Enter PIN ---
     pin_fields_sel = SelectorManager.get_selector("fb_withdraw_page", "pin_input_fields")
@@ -127,7 +127,7 @@ async def _execute_withdrawal_flow(page: Page, amount: str = "100", pin: str = "
 
     pin_confirm_sel = SelectorManager.get_selector("fb_withdraw_page", "pin_confirm_button")
     await page.wait_for_selector(f"{pin_confirm_sel}:not(.is-disabled)", timeout=10000)
-    await robust_click(page.locator(pin_confirm_sel).first, page)
+    await page.locator(pin_confirm_sel).first.click()
 
     # --- Stage 4: Wait for success dialog "Pending Request" ---
     try:

@@ -77,7 +77,7 @@ For a high-level visual representation, see: [leobook_algorithm.mmd](file:///c:/
         - **Time Check**: Skips matches <10 mins to start using `check_match_start_time()`.
         - **Navigation**: Visits match URL, ensures "Bet Insights" widget is collapsed.
         - **Market Search**: Unifies search for market/outcome using dynamic selectors.
-        - **Selection**: Clicks outcome button via `robust_click()`.
+        - **Selection**: Clicks outcome button.
         - **Accumulation**: Adds to slip until limit, then finalizes via `finalize_accumulator()`.
     - [slip.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/booker/slip.py): `get_bet_slip_count()` tracks capacity.
 

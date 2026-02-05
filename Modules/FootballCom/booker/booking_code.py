@@ -19,7 +19,7 @@ from Core.Utils.utils import log_error_state, capture_debug_snapshot
 from Core.Intelligence.selector_manager import SelectorManager
 from Core.Intelligence.intelligence import get_selector, get_selector_auto, fb_universal_popup_dismissal as neo_popup_dismissal
 
-from .ui import robust_click, handle_page_overlays, dismiss_overlays
+from .ui import handle_page_overlays, dismiss_overlays
 from .mapping import find_market_and_outcome
 from .slip import get_bet_slip_count
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -262,7 +262,7 @@ async def place_bets_for_matches(page: Page, matched_urls: Dict[str, str], day_p
                         if outcome_count > 0:
                             print(f"    [Betting] Found {outcome_count} matches for outcome '{o_name}'")
                             count_before = await get_bet_slip_count(page)
-                            if await robust_click(frame.locator(outcome_sel).first, page):
+                            if await frame.locator(outcome_sel).first.click():
                                 await asyncio.sleep(2)
                                 if await get_bet_slip_count(page) > count_before:
                                     selected_bets += 1
@@ -327,7 +327,7 @@ async def finalize_accumulator(page: Page, target_date: str) -> bool:
         if not is_open:
             trigger_sel = await get_selector_auto(page, "fb_match_page", "slip_trigger_button")
             if trigger_sel:
-                if await robust_click(page.locator(trigger_sel).first, page):
+                if await page.locator(trigger_sel).first.click():
                     await asyncio.sleep(3)
             else:
                 print("    [Betting] Slip trigger selector missing")
@@ -366,7 +366,7 @@ async def finalize_accumulator(page: Page, target_date: str) -> bool:
         
         if place_sel:
             try:
-                if await robust_click(page.locator(place_sel).first, page):
+                if await page.locator(place_sel).first.click():
                     print(f"    [Betting] Clicked place bet with selector: {place_sel}")
                     bet_placed = True
                     await asyncio.sleep(2)
@@ -383,7 +383,7 @@ async def finalize_accumulator(page: Page, target_date: str) -> bool:
         if confirm_sel:
             try:
                 if await page.locator(confirm_sel).count() > 0:
-                    await robust_click(page.locator(confirm_sel).first, page)
+                    await page.locator(confirm_sel).first.click()
                     print(f"    [Betting] Confirmed bet with selector: {confirm_sel}")
                     await asyncio.sleep(3)
                     

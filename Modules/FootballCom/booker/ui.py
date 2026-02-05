@@ -30,26 +30,6 @@ async def handle_page_overlays(page: Page):
             await page.evaluate(f"document.querySelectorAll('{selector}').forEach(el => el.style.display = 'none')")
         except: pass
 
-async def robust_click(locator: Locator, page: Page, timeout: int = 5000):
-    """A resilient click function that handles overlays and retries via dispatch_event."""
-    try:
-        await handle_page_overlays(page)
-        if await locator.count() > 0:
-            try:
-                await locator.scroll_into_view_if_needed(timeout=2000)
-            except: pass
-            
-            if await locator.is_visible(timeout=timeout):
-                try:
-                    await locator.click(timeout=timeout, force=True)
-                    return True
-                except Exception:
-                    await locator.dispatch_event("click")
-                    return True
-        return False
-    except Exception as e:
-        print(f"    [Action Error] robust_click failed: {e}")
-        return False
 
 async def wait_for_condition(condition_func, timeout: int = 10000, interval: float = 0.5) -> bool:
     """

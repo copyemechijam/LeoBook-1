@@ -1,6 +1,6 @@
 # Leo
 **Manufacturer**: Emenike Chinenye James  
-**Powered by**: Grok 4 & Gemini 2.5 Flash
+**Powered by**: Grok 4.1 & Gemini 3
 
 """
 Leo v3.2: Elite Autonomous Betting Agent (Manufacturer: Emenike Chinenye James)
