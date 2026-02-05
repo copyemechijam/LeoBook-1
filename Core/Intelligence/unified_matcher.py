@@ -88,7 +88,7 @@ RULES:
 3. TIME & STATUS FILTERING:
    - Perform a WEB SEARCH to verify the real-time status and kickoff time of each candidate match.
    - DISCARD any match that has already started or finished according to:
-     a) The kickoff time and date provided in 'PREDICTIONS' (Predictions.csv data).
+     a) The kickoff time and date provided in 'PREDICTIONS' (Predictions.csv data) WAT.
      b) The Current System Time ({now_str} WAT).
      c) Your real-time web search results.
    - If a match is LIVE, COMPLETED, or POSTPONED, it MUST be excluded.
