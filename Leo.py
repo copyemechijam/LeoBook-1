@@ -76,7 +76,7 @@ async def main():
 
                 # --- PHASE 2: BOOKING (Act) ---
                 log_state(phase="Phase 2", action="Starting Booking Process", next_step="Withdrawal Check")
-                # This phase now strictly follows Harvest -> Execute flow
+                # This phase now follows the Unified "Search & Place" flow
                 await run_football_com_booking(p)
                 
                 # Update current balance in state after booking
