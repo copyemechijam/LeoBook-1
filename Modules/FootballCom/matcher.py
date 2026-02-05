@@ -136,199 +136,39 @@ def parse_match_datetime(date_str: str, time_str: str, is_site_format: bool = Fa
             return None
 
 
+from Core.Intelligence.unified_matcher import UnifiedBatchMatcher
+
 async def match_predictions_with_site(day_predictions: List[Dict], site_matches: List[Dict]) -> Dict[str, str]:
     """
-    Match predictions to site matches primarily by holistic string similarity on the full
-    "Region - League: Home vs Away - Date - Time" descriptor, with datetime priority and optional LLM fallback.
+    Match predictions to site matches using the Advanced Unified AI Batch Matcher (v2.8).
+    Resolves all matches for a date in a single AI call with Grok/Gemini rotation.
     """
-    # Filter out predictions for matches that have already started or start in < 10 mins (Safety Buffer)
-    # Both predictions.csv and site are in Nigerian Time (UTC+1)
-    # Both predictions.csv and site are in Nigerian Time (UTC+1)
-    now_nigeria = datetime.utcnow() + timedelta(hours=1)
-    cutoff_time = now_nigeria + timedelta(minutes=10)
-    print(f"  [Matcher] Filtering matches before {cutoff_time.strftime('%H:%M')} (Nigeria Time + 10m buffer)")
-    future_predictions = []
-    for pred in day_predictions:
-        pred_date = pred.get('date', '').strip()
-        pred_time = pred.get('match_time', '').strip()
-        pred_dt = parse_match_datetime(pred_date, pred_time, is_site_format=False)
-        if pred_dt and pred_dt > (now_nigeria + timedelta(minutes=10)):
-            future_predictions.append(pred)
-
-    if not future_predictions:
-        print("  [Matcher] No future pending predictions found within Nigerian Time (UTC+1).")
+    if not day_predictions or not site_matches:
         return {}
 
-    day_predictions = future_predictions
-    print(f"  [Matcher] Attempting to match {len(day_predictions)} future predictions (Nigerian Time).")
+    # Extract target date from the first prediction (safely)
+    target_date = day_predictions[0].get('date')
+    print(f"  [Matcher] Starting Unified AI Batch Match for {target_date}...")
+    print(f"  [Matcher] Input: {len(day_predictions)} predictions and {len(site_matches)} site candidates.")
 
-    # Initialise LLM matcher once if available
-    llm_matcher: Optional[Any] = None
-    if HAS_LLM and llm_module:
-        try:
-            llm_matcher = llm_module.SemanticMatcher()
-            print("  [Matcher] LLM Semantic Matcher initialized.")
-        except Exception as e:
-            print(f"  [Matcher] Failed to initialise LLM matcher: {e}")
-
-    # --- Pre-filter Site Matches ---
-    # Remove matches with empty or suspiciously short names (e.g. " vs ")
-    valid_site_matches = []
-    for m in site_matches:
-            # Handle both DB format (home_team/away_team) and matcher format (home/away)
-            h = m.get('home', '') or m.get('home_team', '')
-            a = m.get('away', '') or m.get('away_team', '')
-            h = h.strip() if h else ''
-            a = a.strip() if a else ''
-            if len(h) < 2 or len(a) < 2:
-                continue
-            valid_site_matches.append(m)
+    # Initialize batch matcher
+    matcher = UnifiedBatchMatcher()
     
-    if len(valid_site_matches) < len(site_matches):
-        print(f"  [Matcher] Filtered out {len(site_matches) - len(valid_site_matches)} invalid site matches (empty names).")
-    site_matches = valid_site_matches
-
-    mapping: Dict[str, str] = {}
-
-    used_site_urls = set()
-
-    for pred in day_predictions:
-        pred_id = str(pred.get('fixture_id', ''))
-        pred_region_league = pred.get('region_league', '').strip()
-        pred_home = pred.get('home_team', '').strip()
-        pred_away = pred.get('away_team', '').strip()
-        pred_date = pred.get('date', '').strip()
-        pred_time = pred.get('match_time', '').strip()
-
-        pred_full_str = build_match_string(pred_region_league, pred_home, pred_away, pred_date, pred_time)
-
-        pred_dt = parse_match_datetime(pred_date, pred_time, is_site_format=False)
-
-        # Phase 1: Score all candidates
-        candidates = []
-        for site_match in site_matches:
-            site_url = site_match.get('url', '')
-            if not site_url or site_url in used_site_urls:
-                continue
-
-            site_region_league = site_match.get('league', '').strip()
-            # Handle both DB format (home_team/away_team) and matcher format (home/away)
-            site_home = site_match.get('home', '') or site_match.get('home_team', '')
-            site_away = site_match.get('away', '') or site_match.get('away_team', '')
-            site_home = site_home.strip()
-            site_away = site_away.strip()
-            site_date = site_match.get('date', '').strip()
-            site_time = site_match.get('time', '').strip()
-
-            site_full_str = build_match_string(site_region_league, site_home, site_away, site_date, site_time)
-            full_similarity = calculate_similarity(pred_full_str, site_full_str)
-
-            # 1. League Similarity Check (Penalty if disjoint)
-            league_sim = calculate_similarity(pred_region_league, site_region_league)
-            league_penalty = -0.15 if league_sim < 0.82 else 0.0
-
-            # 2. Direction Check (Home/Away Swap Prevention)
-            # Compare home-home and away-away vs home-away and away-home
-            h_h_sim = calculate_similarity(pred_home, site_home)
-            a_a_sim = calculate_similarity(pred_away, site_away)
-            
-            h_a_sim = calculate_similarity(pred_home, site_away)
-            a_h_sim = calculate_similarity(pred_away, site_home)
-            
-            # If swapped similarity is significantly higher than direct similarity, it's likely a swap
-            is_swapped = (h_a_sim + a_h_sim) > (h_h_sim + a_a_sim + 0.3)
-            swap_penalty = -0.5 if is_swapped else 0.0
-
-            # 3. Datetime Bonus (Synced to Nigerian Time)
-            site_dt = parse_match_datetime(site_date, site_time, is_site_format=True)
-
-            time_bonus = 0.0
-            if pred_dt and site_dt:
-                time_diff_minutes = abs((pred_dt - site_dt).total_seconds()) / 60
-                if time_diff_minutes <= 30: 
-                    time_bonus = 0.35 
-                elif time_diff_minutes <= 90:
-                    time_bonus = 0.15
-            
-            base_score = full_similarity
-            total_score = base_score + time_bonus + league_penalty + swap_penalty
-            
-            candidates.append({
-                'match': site_match,
-                'total_score': total_score,
-                'base_score': base_score,
-                'full_str': site_full_str,
-                'dt': site_dt
-            })
-
-        # Phase 2: Select Top Candidate
-        if not candidates:
-            print(f"  ✗ No candidates found for prediction {pred_id} ({pred_home} vs {pred_away})")
-            continue
-            
-        candidates.sort(key=lambda x: x['total_score'], reverse=True)
-        top = candidates[0]
+    # Execute batch matching
+    try:
+        mapping = await matcher.match_batch(target_date, day_predictions, site_matches)
         
-        # Phase 3: LLM Verification (Only for the single best candidate if borderline)
-        final_match_found = False
+        # Verify and log results
+        matched_count = len(mapping)
+        print(f"  [Matcher] Batch matching complete: {matched_count}/{len(day_predictions)} matches resolved.")
+        
+        # Log individual matches for visibility
+        for fid, url in mapping.items():
+            pred = next((p for p in day_predictions if str(p.get('fixture_id')) == fid), None)
+            if pred:
+                print(f"    [OK] AI Matched: {pred.get('home_team')} vs {pred.get('away_team')} -> {url}")
 
-        if top['total_score'] >= 0.94: # Raised slightly
-            final_match_found = True
-            print(f"    [Matcher] Strong match found: {pred_home} vs {pred_away} (Score: {top['total_score']:.3f})")
-        elif top['total_score'] >= 0.78:  # Raised slightly
-            final_match_found = True
-            print(f"    [Matcher] High confidence match found: {pred_home} vs {pred_away} (Score: {top['total_score']:.3f})")
-        elif top['total_score'] >= 0.60 and llm_matcher:
-            # Borderline case: Ask AI
-            m = top['match']
-            site_home = m.get('home', '') or m.get('home_team', '')
-            site_away = m.get('away', '') or m.get('away_team', '')
-            print(f"    [LLM Check] Verifying borderline candidate: Pred '{pred_home} vs {pred_away}' ↔ Site '{site_home} vs {site_away}' (Score: {top['total_score']:.3f})")
-
-            llm_result = await llm_matcher.is_match(
-                f"{pred_home} vs {pred_away} in {pred_region_league}",
-                f"{site_home} vs {site_away} in {m.get('league', '')}",
-                league=pred_region_league
-            )
-
-            # Handle upgraded LLM Response (True/False or Dict with confidence)
-            if isinstance(llm_result, dict):
-                is_match_val = llm_result.get('is_match')
-                confidence = llm_result.get('confidence', 0)
-                if is_match_val is True and confidence >= 85:
-                    print(f"      -> AI confirmed match! (Confidence: {confidence}%)")
-                    final_match_found = True
-                else:
-                    print(f"      -> AI rejected match (Confidence: {confidence}%).")
-            elif llm_result is True:
-                print("      -> AI confirmed match!")
-                final_match_found = True
-            elif llm_result is False:
-                print("      -> AI rejected match.")
-            else:
-                # LLM failed/timeout - Tiered fallback
-                if top['total_score'] >= 0.82: # Higher threshold for timeout acceptance
-                    print("      -> AI timeout, but very high score - accepting match!")
-                    final_match_found = True
-                else:
-                    print("      -> AI timeout, score too low - rejecting match.")
-
-        if final_match_found:
-            site_url = top['match'].get('url')
-            mapping[pred_id] = site_url
-            used_site_urls.add(site_url)
-            time_str = pred_dt.strftime('%Y-%m-%d %H:%M') if pred_dt else 'N/A'
-            m = top['match']
-            site_home = m.get('home', '') or m.get('home_team', '')
-            site_away = m.get('away', '') or m.get('away_team', '')
-            print(f"  [OK] Matched prediction {pred_id} ({pred_home} vs {pred_away} @ {time_str}) "
-                  f"-> {site_home} vs {site_away} (score {top['total_score']:.3f})")
-        else:
-            if top['total_score'] > 0.5: # Only print if there was a somewhat reasonable candidate
-                print(f"  [X] No reliable match found for prediction {pred_id} ({pred_home} vs {pred_away}). Top candidate score {top['total_score']:.3f} was rejected or too low.")
-            else:
-                print(f"  [X] No reliable match found for prediction {pred_id} ({pred_home} vs {pred_away}). All candidates too low.")
-
-
-    print(f"  [Matcher] Matching complete: {len(mapping)}/{len(day_predictions)} predictions matched.")
-    return mapping
+        return mapping
+    except Exception as e:
+        print(f"  [Matcher Error] Unified batch matching failed: {e}")
+        return {}

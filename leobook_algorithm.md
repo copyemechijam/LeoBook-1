@@ -64,9 +64,15 @@ For a high-level visual representation, see: [leobook_algorithm.mmd](file:///c:/
     - [fb_session.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/fb_session.py): `launch_browser_with_retry()` initializes the anti-detect session.
     - [navigator.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/navigator.py): `load_or_create_session()` and `extract_balance()` validate the account state.
 
-2.  **Phase 2a: Harvest (Code Generation)**:
-    - [fb_url_resolver.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/fb_url_resolver.py): `resolve_urls()` searches for match pages.
-    - [matcher.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/matcher.py): `match_predictions_with_site()` uses fuzzy matching and [llm_matcher.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Core/Intelligence/llm_matcher.py) (threshold 0.60) to resolve fixtures.
+2. ### **Phase 2a: Harvest (Match Discovery)**
+**Objective**: Connect prediction data to live bookmaker URLs using high-intelligence AI.
+
+- **Orchestrator**: [fb_url_resolver.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/fb_url_resolver.py)
+- **Logic**: 
+  - Resolves all matches for a target date in a **single AI Batch Prompt**.
+  - **Rotation Layer**: [unified_matcher.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Core/Intelligence/unified_matcher.py) (Rotates through Grok, Gemini, and OpenRouter).
+  - **Matching Strategy**: Bypasses local fuzzy matching; relies on AI semantic intelligence to map `fixture_id` to URLs while filtering for "already started" matches.
+  - **Action**: Extracts sharing booking codes for each matched fixture.
     - [booking_code.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/booker/booking_code.py): `harvest_single_match_code()` worker:
         - Navigates to match URL.
         - [mapping.py](file:///c:/Users/Admin/Desktop/ProProjection/LeoBook/Modules/FootballCom/booker/mapping.py): `find_market_and_outcome()` locates UI elements.
