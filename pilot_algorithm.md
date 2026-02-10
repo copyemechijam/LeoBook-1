@@ -26,8 +26,9 @@ The system is split into two main components:
 
 ### Flutter App Architecture (Clean Architecture / MVVM)
 - **Data Layer**:
-    - `DataRepository`: Fetches `schedules.csv` and `recommended.json` from the official GitHub repository using high-performance raw URLs.
-    - **Caching**: Implements a `shared_preferences` based cache-aside pattern, allowing full offline support for previously loaded data.
+    - `DataRepository`: Fetches `predictions.csv` from GitHub repository via raw URLs with extended timeout (180s) to handle the 6.8 MB file size.
+    - **Optimization**: Only `predictions.csv` is fetched (schedules.csv removed per requirements). The predictions file contains all necessary match and prediction data.
+    - **Caching**: Implements `shared_preferences` based cache-aside pattern for full offline support.
     - `NewsRepository`: Fetches latest sports news from configured sources.
 
 - **Logic Layer**:
