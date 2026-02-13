@@ -276,7 +276,40 @@ class SyncManager:
             if 'last_updated' not in clean or not clean['last_updated']:
                 clean['last_updated'] = datetime.utcnow().isoformat()
             
+            # Sanitize: reject URL values in timestamp/date columns
+            for ts_col in ['last_updated', 'date_updated', 'last_extracted', 'created_at', 'updated_at']:
+                val = clean.get(ts_col)
+                if isinstance(val, str) and val.startswith('http'):
+                    clean[ts_col] = datetime.utcnow().isoformat()
+            
             cleaned_data.append(clean)
+
+        # --- DATA QUALITY GATES ---
+        # 1. Filter rows with null conflict key (Supabase rejects these)
+        conflict_keys = [k.strip() for k in conflict_key.split(',')]
+        cleaned_data = [
+            row for row in cleaned_data
+            if all(row.get(k) not in (None, '', 'null') for k in conflict_keys)
+        ]
+
+        # 2. Deduplicate by conflict key (Supabase rejects duplicate keys in same batch)
+        seen = set()
+        deduped = []
+        for row in cleaned_data:
+            key_val = tuple(row.get(k) for k in conflict_keys)
+            if key_val not in seen:
+                seen.add(key_val)
+                deduped.append(row)
+        cleaned_data = deduped
+
+        # 3. Sanitize null Unicode escapes (\u0000) that PostgreSQL rejects
+        for row in cleaned_data:
+            for k, v in row.items():
+                if isinstance(v, str) and '\x00' in v:
+                    row[k] = v.replace('\x00', '')
+
+        if not cleaned_data:
+            return
 
         try:
             # Upsert

@@ -87,25 +87,25 @@ async def _raw_safe_text(page, selector: str) -> Optional[str]:
 
 
 async def _smart_attr(page, context: str, key: str, attr: str) -> Optional[str]:
-    """Safe extraction wrapped in AI-healing interaction engine."""
+    """Safe extraction using direct selector lookup."""
     try:
-        return await SelectorManager.execute_smart_action(
-            page, context, key,
-            lambda s: _raw_safe_attr(page, s, attr)
-        )
+        selector = SelectorManager.get_selector(context, key)
+        if selector:
+            return await _raw_safe_attr(page, selector, attr)
     except:
-        return None
+        pass
+    return None
 
 
 async def _smart_text(page, context: str, key: str) -> Optional[str]:
-    """Safe text extraction wrapped in AI-healing interaction engine."""
+    """Safe text extraction using direct selector lookup."""
     try:
-        return await SelectorManager.execute_smart_action(
-            page, context, key,
-            lambda s: _raw_safe_text(page, s)
-        )
+        selector = SelectorManager.get_selector(context, key)
+        if selector:
+            return await _raw_safe_text(page, selector)
     except:
-        return None
+        pass
+    return None
 
 
 def _id_from_href(href: str) -> Optional[str]:
@@ -214,11 +214,7 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
         # --- STANDINGS (optional) ---
         if extract_standings:
             try:
-                # Wrap the complex tab activation in the smart engine
-                tab_active = await SelectorManager.execute_smart_action(
-                    page, "fs_match_page", "tab_standings",
-                    lambda s: activate_standings_tab(page)
-                )
+                tab_active = await activate_standings_tab(page)
                 if tab_active:
                     standings_result = await retry_extraction(extract_standings_data, page)
                     if standings_result:
