@@ -186,7 +186,6 @@ class VisualAnalyzer:
         - Avoid unstable generated classes (e.g., 'css-1abc').
         - Ensure selectors are uniquely identifiable within the context.
         """
-        """
 
         prompt_tail = f"""
         ### INPUT
