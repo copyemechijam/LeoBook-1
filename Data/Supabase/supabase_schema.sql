@@ -1,6 +1,6 @@
 -- GLOBAL SUPABASE SCHEMA (LeoBook)
 -- This file serves as the single source of truth for the database schema.
--- v1.1: Added robust ALTER TABLE statements to handle existing tables.
+-- v1.2: Added DROP POLICY IF EXISTS for full idempotency.
 
 -- =============================================================================
 -- 1. EXTENSIONS & SETUP
@@ -24,11 +24,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
--- Migration checks for profiles
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
+-- Idempotent Policies for profiles
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Trigger for new user
@@ -63,6 +65,8 @@ CREATE TABLE IF NOT EXISTS public.custom_rules (
 ALTER TABLE public.custom_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.custom_rules ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
+-- Idempotent Policies for custom_rules
+DROP POLICY IF EXISTS "Users can fully manage own rules" ON public.custom_rules;
 CREATE POLICY "Users can fully manage own rules" ON public.custom_rules FOR ALL USING (auth.uid() = user_id);
 
 CREATE TABLE IF NOT EXISTS public.rule_executions (
@@ -78,6 +82,8 @@ CREATE TABLE IF NOT EXISTS public.rule_executions (
 ALTER TABLE public.rule_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rule_executions ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
+-- Idempotent Policies for rule_executions
+DROP POLICY IF EXISTS "Users can view own rule executions" ON public.rule_executions;
 CREATE POLICY "Users can view own rule executions" ON public.rule_executions FOR SELECT USING (auth.uid() = user_id);
 
 -- =============================================================================
@@ -98,6 +104,8 @@ CREATE TABLE IF NOT EXISTS public.region_league (
 );
 ALTER TABLE public.region_league ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.region_league ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access RegionLeague" ON public.region_league;
 CREATE POLICY "Public Read Access RegionLeague" ON public.region_league FOR SELECT USING (true);
 
 -- Teams
@@ -111,6 +119,8 @@ CREATE TABLE IF NOT EXISTS public.teams (
 );
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access Teams" ON public.teams;
 CREATE POLICY "Public Read Access Teams" ON public.teams FOR SELECT USING (true);
 
 -- Schedules
@@ -131,9 +141,10 @@ CREATE TABLE IF NOT EXISTS public.schedules (
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
--- CRITICAL FIX: Ensure 'status' column exists if table was created in an older version
 ALTER TABLE public.schedules ADD COLUMN IF NOT EXISTS status TEXT;
 ALTER TABLE public.schedules ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access Schedules" ON public.schedules;
 CREATE POLICY "Public Read Access Schedules" ON public.schedules FOR SELECT USING (true);
 
 -- Predictions
@@ -178,6 +189,8 @@ CREATE TABLE IF NOT EXISTS public.predictions (
 );
 ALTER TABLE public.predictions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.predictions ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access Predictions" ON public.predictions;
 CREATE POLICY "Public Read Access Predictions" ON public.predictions FOR SELECT USING (true);
 
 -- Standings
@@ -200,6 +213,8 @@ CREATE TABLE IF NOT EXISTS public.standings (
 );
 ALTER TABLE public.standings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.standings ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access Standings" ON public.standings;
 CREATE POLICY "Public Read Access Standings" ON public.standings FOR SELECT USING (true);
 
 -- FB Matches
@@ -224,6 +239,8 @@ CREATE TABLE IF NOT EXISTS public.fb_matches (
 );
 ALTER TABLE public.fb_matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fb_matches ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DROP POLICY IF EXISTS "Public Read Access FBMatches" ON public.fb_matches;
 CREATE POLICY "Public Read Access FBMatches" ON public.fb_matches FOR SELECT USING (true);
 
 -- =============================================================================
@@ -233,7 +250,7 @@ CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
    NEW.updated_at = NOW();
-   NEW.last_updated = NOW(); -- Also update last_updated
+   NEW.last_updated = NOW();
    RETURN NEW;
 END;
 $$ language 'plpgsql';
