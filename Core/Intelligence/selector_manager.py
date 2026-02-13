@@ -43,6 +43,14 @@ class SelectorManager:
         return selector
 
     @staticmethod
+    async def execute_smart_action(page, context_key: str, element_key: str, action_fn, max_retries: int = 3):
+        """
+        Public accessor to the resilient interaction engine.
+        """
+        from .interaction_engine import execute_smart_action
+        return await execute_smart_action(page, context_key, element_key, action_fn, max_retries)
+
+    @staticmethod
     async def get_selector_auto(page, context_key: str, element_key: str) -> str:
         """
         SMART ACCESSOR:

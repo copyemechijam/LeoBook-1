@@ -60,8 +60,10 @@ def load_selectors() -> Dict[str, str]:
     return selectors
 
 
-async def _safe_attr(page, selector: str, attr: str) -> Optional[str]:
-    """Safely query a selector and extract an attribute value."""
+from Core.Intelligence.selector_manager import SelectorManager
+
+async def _raw_safe_attr(page, selector: str, attr: str) -> Optional[str]:
+    """Raw attribute extraction for smart wrapper."""
     try:
         el = await page.query_selector(selector)
         if el:
@@ -72,8 +74,8 @@ async def _safe_attr(page, selector: str, attr: str) -> Optional[str]:
     return None
 
 
-async def _safe_text(page, selector: str) -> Optional[str]:
-    """Safely query a selector and extract inner text."""
+async def _raw_safe_text(page, selector: str) -> Optional[str]:
+    """Raw text extraction for smart wrapper."""
     try:
         el = await page.query_selector(selector)
         if el:
@@ -82,6 +84,28 @@ async def _safe_text(page, selector: str) -> Optional[str]:
     except:
         pass
     return None
+
+
+async def _smart_attr(page, context: str, key: str, attr: str) -> Optional[str]:
+    """Safe extraction wrapped in AI-healing interaction engine."""
+    try:
+        return await SelectorManager.execute_smart_action(
+            page, context, key,
+            lambda s: _raw_safe_attr(page, s, attr)
+        )
+    except:
+        return None
+
+
+async def _smart_text(page, context: str, key: str) -> Optional[str]:
+    """Safe text extraction wrapped in AI-healing interaction engine."""
+    try:
+        return await SelectorManager.execute_smart_action(
+            page, context, key,
+            lambda s: _raw_safe_text(page, s)
+        )
+    except:
+        return None
 
 
 def _id_from_href(href: str) -> Optional[str]:
@@ -119,48 +143,48 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
         enriched = {}
 
         # --- HOME TEAM ---
-        home_href = await _safe_attr(page, sel.get('home_name', ''), 'href')
+        home_href = await _smart_attr(page, "fs_match_page", "home_name", "href")
         if home_href:
             enriched['home_team_id'] = _id_from_href(home_href)
             enriched['home_team_url'] = _standardize_url(home_href)
-        home_name = await _safe_text(page, sel.get('home_name', ''))
+        home_name = await _smart_text(page, "fs_match_page", "home_name")
         if home_name:
             enriched['home_team_name'] = home_name
-        home_crest_src = await _safe_attr(page, sel.get('home_crest', ''), 'src')
+        home_crest_src = await _smart_attr(page, "fs_match_page", "home_crest", "src")
         if home_crest_src:
             enriched['home_team_crest'] = _standardize_url(home_crest_src)
 
         # --- AWAY TEAM ---
-        away_href = await _safe_attr(page, sel.get('away_name', ''), 'href')
+        away_href = await _smart_attr(page, "fs_match_page", "away_name", "href")
         if away_href:
             enriched['away_team_id'] = _id_from_href(away_href)
             enriched['away_team_url'] = _standardize_url(away_href)
-        away_name = await _safe_text(page, sel.get('away_name', ''))
+        away_name = await _smart_text(page, "fs_match_page", "away_name")
         if away_name:
             enriched['away_team_name'] = away_name
-        away_crest_src = await _safe_attr(page, sel.get('away_crest', ''), 'src')
+        away_crest_src = await _smart_attr(page, "fs_match_page", "away_crest", "src")
         if away_crest_src:
             enriched['away_team_crest'] = _standardize_url(away_crest_src)
 
         # --- REGION + LEAGUE ---
-        region_name = await _safe_text(page, sel.get('region_name', ''))
+        region_name = await _smart_text(page, "fs_match_page", "region_name")
         if region_name:
             enriched['region'] = region_name
 
-        region_flag_src = await _safe_attr(page, sel.get('region_flag_img', ''), 'src')
+        region_flag_src = await _smart_attr(page, "fs_match_page", "region_flag_img", "src")
         if region_flag_src:
             enriched['region_flag'] = region_flag_src
 
-        region_url_href = await _safe_attr(page, sel.get('region_url', ''), 'href')
+        region_url_href = await _smart_attr(page, "fs_match_page", "region_url", "href")
         if region_url_href:
             enriched['region_url'] = _standardize_url(region_url_href)
 
-        league_url_href = await _safe_attr(page, sel.get('league_url', ''), 'href')
+        league_url_href = await _smart_attr(page, "fs_match_page", "league_url", "href")
         if league_url_href:
             enriched['league_url'] = _standardize_url(league_url_href)
             enriched['rl_id'] = _id_from_href(league_url_href)
 
-        league_name_text = await _safe_text(page, sel.get('league_url', ''))
+        league_name_text = await _smart_text(page, "fs_match_page", "league_url")
         if league_name_text:
             enriched['league'] = league_name_text
 
@@ -168,8 +192,8 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
             enriched['region_league'] = f"{region_name.upper()} - {league_name_text}"
 
         # --- FINAL SCORE ---
-        home_score = await _safe_text(page, sel.get('final_score_home', ''))
-        away_score = await _safe_text(page, sel.get('final_score_away', ''))
+        home_score = await _smart_text(page, "fs_match_page", "final_score_home")
+        away_score = await _smart_text(page, "fs_match_page", "final_score_away")
         if home_score:
             enriched['home_score'] = home_score
         if away_score:
@@ -177,7 +201,7 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
 
         # --- MATCH DATETIME ---
         try:
-            dt_text = await _safe_text(page, sel.get('match_time', ''))
+            dt_text = await _smart_text(page, "fs_match_page", "match_time")
             if dt_text:
                 date_part, time_part = smart_parse_datetime(dt_text)
                 if date_part:
@@ -189,10 +213,18 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
 
         # --- STANDINGS (optional) ---
         if extract_standings:
-            if await activate_standings_tab(page):
-                standings_result = await retry_extraction(extract_standings_data, page)
-                if standings_result:
-                    enriched['_standings_data'] = standings_result
+            try:
+                # Wrap the complex tab activation in the smart engine
+                tab_active = await SelectorManager.execute_smart_action(
+                    page, "fs_match_page", "tab_standings",
+                    lambda s: activate_standings_tab(page)
+                )
+                if tab_active:
+                    standings_result = await retry_extraction(extract_standings_data, page)
+                    if standings_result:
+                        enriched['_standings_data'] = standings_result
+            except Exception as e:
+                print(f"      [Smart Standings Error] {e}")
 
         return enriched if enriched else None
 
