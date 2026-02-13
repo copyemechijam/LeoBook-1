@@ -20,22 +20,24 @@ class NewsFeed extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           child: Row(
             children: [
-              const Icon(Icons.newspaper, color: AppColors.primary, size: 20),
+              Icon(Icons.newspaper, color: AppColors.primary, size: 18),
               const SizedBox(width: 8),
               Text(
                 "LATEST UPDATES",
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                  color: isDark ? Colors.white : AppColors.textDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.7)
+                      : AppColors.textDark,
                 ),
               ),
             ],
           ),
         ),
         SizedBox(
-          height: 250, // Increased to fit card content comfortably
+          height: 250,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -59,36 +61,34 @@ class NewsFeed extends StatelessWidget {
       },
       child: Container(
         width: 280,
-        margin: const EdgeInsets.only(right: 16),
+        margin: const EdgeInsets.only(right: 14),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.cardDark : Colors.white,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.white.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.05),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
           ),
-          boxShadow: [
-            if (!isDark)
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image Container with Aspect Ratio
+            // Image Container
             AspectRatio(
               aspectRatio: 16 / 9,
               child: Container(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : AppColors.backgroundLight,
-                child: const Icon(Icons.image, color: Colors.white24, size: 40),
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.04),
+                child: Icon(
+                  Icons.image_outlined,
+                  color: isDark ? Colors.white12 : Colors.black12,
+                  size: 36,
+                ),
               ),
             ),
             Padding(
@@ -102,7 +102,7 @@ class NewsFeed extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       height: 1.3,
                       color: isDark ? Colors.white : AppColors.textDark,
                     ),
@@ -112,9 +112,9 @@ class NewsFeed extends StatelessWidget {
                     children: [
                       Text(
                         item.source.toUpperCase(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 9,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.primary,
                           letterSpacing: 0.5,
                         ),
@@ -123,15 +123,15 @@ class NewsFeed extends StatelessWidget {
                       Icon(
                         Icons.access_time_filled,
                         size: 10,
-                        color: AppColors.textGrey.withValues(alpha: 0.6),
+                        color: AppColors.textGrey.withValues(alpha: 0.5),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         item.timeAgo.toUpperCase(),
                         style: TextStyle(
                           fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textGrey.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textGrey.withValues(alpha: 0.5),
                         ),
                       ),
                     ],

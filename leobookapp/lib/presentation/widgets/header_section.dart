@@ -146,7 +146,9 @@ class _HeaderSectionState extends State<HeaderSection> {
 
             Divider(
               height: 1,
-              color: isDark ? AppColors.cardDark : Colors.grey.withAlpha(50),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
 
             // Date Strip - Centered on Today
@@ -219,21 +221,26 @@ class _HeaderSectionState extends State<HeaderSection> {
 
     return GestureDetector(
       onTap: () => widget.onDateChanged(date),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
         width: 75,
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         padding: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected
-              ? Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  width: 1,
-                )
-              : null,
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.03)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.25)
+                : (isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.04)),
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -6,6 +6,8 @@ import 'package:leobookapp/data/repositories/data_repository.dart';
 import '../screens/team_screen.dart';
 import '../screens/league_screen.dart';
 
+import 'package:leobookapp/core/widgets/glass_container.dart';
+
 class RecommendationCard extends StatelessWidget {
   final RecommendationModel recommendation;
 
@@ -19,26 +21,13 @@ class RecommendationCard extends StatelessWidget {
         recommendation.league.toLowerCase().contains('live');
     final accentColor = isLive ? AppColors.liveRed : AppColors.primary;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.cardDark : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
-              : Colors.black.withValues(alpha: 0.05),
-        ),
-        boxShadow: [
-          if (!isDark)
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.01),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
+    return GlassContainer(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      borderRadius: 20,
+      onTap: () {
+        // We could link to match details if we had the ID here,
+        // for now just hover/click effect.
+      },
       child: Stack(
         children: [
           // Vertical Accent Line
@@ -46,8 +35,16 @@ class RecommendationCard extends StatelessWidget {
             left: 0,
             top: 0,
             bottom: 0,
-            width: 4,
-            child: Container(color: accentColor),
+            width: 3,
+            child: Container(
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.6),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(2),
+                  bottomRight: Radius.circular(2),
+                ),
+              ),
+            ),
           ),
 
           Padding(
@@ -140,13 +137,13 @@ class RecommendationCard extends StatelessWidget {
                               height: 52,
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.white.withValues(alpha: 0.03)
-                                    : Colors.grey[50],
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.black.withValues(alpha: 0.04),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: isDark
-                                      ? Colors.white10
-                                      : Colors.black.withValues(alpha: 0.05),
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.06),
                                 ),
                               ),
                               child: Center(
@@ -213,13 +210,13 @@ class RecommendationCard extends StatelessWidget {
                               height: 52,
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.white.withValues(alpha: 0.03)
-                                    : Colors.grey[50],
+                                    ? Colors.white.withValues(alpha: 0.05)
+                                    : Colors.black.withValues(alpha: 0.04),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: isDark
-                                      ? Colors.white10
-                                      : Colors.black.withValues(alpha: 0.05),
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.06),
                                 ),
                               ),
                               child: Center(
@@ -332,23 +329,19 @@ class RecommendationCard extends StatelessWidget {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: AppColors.primary.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
+                          Text(
                             "ODDS",
                             style: TextStyle(
-                              color: Colors.white70,
+                              color: AppColors.primary.withValues(alpha: 0.7),
                               fontSize: 9,
                               fontWeight: FontWeight.w900,
                             ),
@@ -357,7 +350,7 @@ class RecommendationCard extends StatelessWidget {
                           Text(
                             recommendation.marketOdds.toStringAsFixed(2),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.primary,
                               fontSize: 16,
                               fontWeight: FontWeight.w900,
                             ),

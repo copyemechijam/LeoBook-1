@@ -18,6 +18,7 @@ class UserModel {
   bool get canRunBacktests => tier == UserTier.lite || tier == UserTier.pro;
   bool get canAutomateBetting => tier == UserTier.pro;
   bool get canAccessChapter2 => tier == UserTier.pro;
+  bool get isPro => tier == UserTier.pro;
 
   factory UserModel.guest() {
     return const UserModel(id: 'guest', tier: UserTier.unregistered);

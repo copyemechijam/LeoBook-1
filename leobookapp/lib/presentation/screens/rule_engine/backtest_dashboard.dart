@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:leobookapp/data/models/rule_config_model.dart';
 import 'package:leobookapp/data/services/leo_service.dart';
 import 'rule_editor_screen.dart';
@@ -19,7 +20,7 @@ class _BacktestDashboardState extends State<BacktestDashboard> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    if (!kIsWeb) _loadInitialData();
   }
 
   Future<void> _loadInitialData() async {

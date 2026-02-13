@@ -7,6 +7,7 @@ import '../screens/match_details_screen.dart';
 import '../screens/team_screen.dart';
 import '../screens/league_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:leobookapp/core/widgets/glass_container.dart';
 
 class MatchCard extends StatelessWidget {
   final MatchModel match;
@@ -20,7 +21,13 @@ class MatchCard extends StatelessWidget {
         match.status.toLowerCase().contains('finished') ||
         match.status.toUpperCase() == 'FT';
 
-    return GestureDetector(
+    return GlassContainer(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(16),
+      borderRadius: 20,
+      borderColor: (match.isLive || match.isStartingSoon)
+          ? AppColors.liveRed.withValues(alpha: 0.3)
+          : null,
       onTap: () {
         Navigator.push(
           context,
@@ -29,223 +36,192 @@ class MatchCard extends StatelessWidget {
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.cardDark : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: (match.isLive || match.isStartingSoon)
-                ? AppColors.liveRed.withValues(alpha: 0.3)
-                : (isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.05)),
-            width: (match.isLive || match.isStartingSoon) ? 1.5 : 1.0,
-          ),
-          boxShadow: [
-            if (!isDark)
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                // Header (League & Time)
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => LeagueScreen(
-                          leagueId: match.league ?? "SOCCER",
-                          leagueName: match.league ?? "SOCCER",
-                        ),
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => LeagueScreen(
+                        leagueId: match.league ?? "SOCCER",
+                        leagueName: match.league ?? "SOCCER",
                       ),
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            (match.league ?? "SOCCER").toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.textGrey.withValues(alpha: 0.8),
-                              letterSpacing: 1.2,
-                            ),
+                    ),
+                  );
+                },
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          (match.league ?? "SOCCER").toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textGrey.withValues(alpha: 0.8),
+                            letterSpacing: 1.2,
                           ),
-                        ],
-                      ),
-                      Text(
-                        "${match.date} • ${match.time}${match.displayStatus.isEmpty ? '' : ' • ${match.displayStatus}'}",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: match.isLive
-                              ? AppColors.liveRed
-                              : AppColors.textGrey,
                         ),
+                      ],
+                    ),
+                    Text(
+                      "${match.date} • ${match.time}${match.displayStatus.isEmpty ? '' : ' • ${match.displayStatus}'}",
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: match.isLive
+                            ? AppColors.liveRed
+                            : AppColors.textGrey,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 16),
 
-                // Teams Comparison / Result
-                if (isFinished)
-                  _buildFinishedLayout(context, isDark)
-                else
-                  _buildActiveLayout(context, isDark),
+              // Teams Comparison / Result
+              if (isFinished)
+                _buildFinishedLayout(context, isDark)
+              else
+                _buildActiveLayout(context, isDark),
 
-                const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                // Prediction Section
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: match.isLive
-                        ? AppColors.liveRed.withValues(alpha: 0.05)
-                        : (isDark
-                              ? Colors.white.withValues(alpha: 0.03)
-                              : AppColors.backgroundLight),
-                    borderRadius: BorderRadius.circular(12),
-                    border: match.isLive
-                        ? Border.all(
-                            color: AppColors.liveRed.withValues(alpha: 0.1),
-                          )
-                        : null,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+              // Prediction Section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: match.isLive
+                      ? AppColors.liveRed.withValues(alpha: 0.06)
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.04)
+                            : Colors.black.withValues(alpha: 0.03)),
+                  borderRadius: BorderRadius.circular(14),
+                  border: match.isLive
+                      ? Border.all(
+                          color: AppColors.liveRed.withValues(alpha: 0.12),
+                        )
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          match.isLive
+                              ? "IN-PLAY PREDICTION"
+                              : "LEO PREDICTION",
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: match.isLive
+                                ? AppColors.liveRed
+                                : AppColors.textGrey,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          match.prediction ?? "N/A",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isFinished
+                                ? AppColors.success
+                                : AppColors.primary,
+                            decoration:
+                                isFinished &&
+                                    !(match.prediction?.contains('Accurate') ??
+                                        true)
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                        if (match.marketReliability != null)
                           Text(
-                            match.isLive
-                                ? "IN-PLAY PREDICTION"
-                                : "LEO PREDICTION",
+                            "RELIABILITY: ${match.marketReliability}%",
                             style: TextStyle(
                               fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: match.isLive
-                                  ? AppColors.liveRed
-                                  : AppColors.textGrey,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            match.prediction ?? "N/A",
-                            style: TextStyle(
-                              fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: isFinished
-                                  ? AppColors.success
-                                  : AppColors.primary,
-                              decoration:
-                                  isFinished &&
-                                      !(match.prediction?.contains(
-                                            'Accurate',
-                                          ) ??
-                                          true)
-                                  ? TextDecoration.lineThrough
-                                  : null,
+                              color: AppColors.success.withValues(alpha: 0.7),
                             ),
                           ),
-                          if (match.marketReliability != null)
-                            Text(
-                              "RELIABILITY: ${match.marketReliability}%",
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.success.withValues(alpha: 0.7),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (match.odds != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
+                      ],
+                    ),
+                    if (match.odds != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isFinished
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : AppColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
                             color: isFinished
-                                ? Colors.blueGrey.shade700
-                                : AppColors.primary,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    (isFinished
-                                            ? Colors.blueGrey
-                                            : AppColors.primary)
-                                        .withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            match.odds!,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : AppColors.primary.withValues(alpha: 0.3),
                           ),
                         ),
-                    ],
-                  ),
+                        child: Text(
+                          match.odds!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: isFinished
+                                ? AppColors.textGrey
+                                : AppColors.primary,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          if (showLiveBadge && (match.isLive || match.isStartingSoon))
+            Positioned(
+              top: 0,
+              right: 0,
+              child: _LiveBadge(
+                minute: match.isLive ? match.liveMinute : "SOON",
+              ),
             ),
-            if (showLiveBadge && (match.isLive || match.isStartingSoon))
-              Positioned(
-                top: 0,
-                right: 0,
-                child: _LiveBadge(
-                  minute: match.isLive ? match.liveMinute : "SOON",
+          if (isFinished && match.isPredictionAccurate)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
                 ),
-              ),
-            if (isFinished && match.isPredictionAccurate)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+                decoration: const BoxDecoration(
+                  color: AppColors.success,
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(20),
+                    bottomLeft: Radius.circular(10),
                   ),
-                  decoration: const BoxDecoration(
-                    color: AppColors.success,
-                    borderRadius: BorderRadius.only(
-                      topRight: Radius.circular(20),
-                      bottomLeft: Radius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    "ACCURATE",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                    ),
+                ),
+                child: const Text(
+                  "ACCURATE",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -528,13 +504,13 @@ class MatchCard extends StatelessWidget {
       height: 56,
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withValues(alpha: 0.05)
-            : AppColors.backgroundLight,
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
         shape: BoxShape.circle,
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.05),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
         ),
       ),
       child: ClipOval(

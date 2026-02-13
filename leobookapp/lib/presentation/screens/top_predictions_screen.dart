@@ -175,20 +175,21 @@ class TopPredictionsScreen extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => context.read<HomeCubit>().updateDate(date),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
         width: 75,
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected
-              ? Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  width: 1,
-                )
-              : null,
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.06),
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

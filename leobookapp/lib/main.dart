@@ -3,7 +3,7 @@ import 'package:leobookapp/core/theme/app_theme.dart';
 import 'package:leobookapp/logic/cubit/home_cubit.dart';
 import 'package:leobookapp/data/repositories/data_repository.dart';
 import 'package:leobookapp/data/repositories/news_repository.dart';
-import 'package:leobookapp/presentation/screens/home_screen.dart';
+import 'package:leobookapp/presentation/screens/main_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:leobookapp/logic/cubit/user_cubit.dart';
 
@@ -48,7 +48,7 @@ class LeoBookApp extends StatelessWidget {
         child: MaterialApp(
           title: 'LeoBook',
           theme: AppTheme.darkTheme,
-          home: const HomeScreen(),
+          home: const MainScreen(),
           debugShowCheckedModeBanner: false,
         ),
       ),

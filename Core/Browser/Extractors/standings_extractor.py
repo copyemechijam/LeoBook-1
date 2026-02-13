@@ -23,19 +23,50 @@ async def activate_standings_tab(page: Page) -> bool:
         return False
 
     try:
-        if await page.locator(tab_selector).is_visible(timeout=5000):
-            await page.click(tab_selector)
-            await page.wait_for_load_state("domcontentloaded")
-            await asyncio.sleep(2.0)
-            await fs_universal_popup_dismissal(page, "fs_standings_tab")
-            await asyncio.sleep(3.0)
-            return True
-        else:
-             print(f"      [Extractor] Standings tab selector '{tab_selector}' not visible.")
-             return False
+        # 1. Try primary selector from knowledge.json
+        if tab_selector and await page.locator(tab_selector).count() > 0:
+            locator = page.locator(tab_selector)
+            if await locator.is_visible(timeout=3000):
+                await locator.click()
+                await _post_activation_prep(page)
+                return True
+
+        # 2. Try URL-based detection (most robust across sports: /standings, /draw, /table)
+        print("      [Extractor] Selector not visible. Trying URL-based detection (#/standings, #/draw, #/table)...")
+        url_selectors = ['a[href*="#/standings"]', 'a[href*="#/draw"]', 'a[href*="#/table"]']
+        for sel in url_selectors:
+            if await page.locator(sel).count() > 0:
+                btn = page.locator(sel).first
+                if await btn.is_visible(timeout=2000):
+                    await btn.click()
+                    await _post_activation_prep(page)
+                    return True
+
+        # 3. Try text-based fallback with broader labels
+        print("      [Extractor] URL detection failed. Trying expanded text fallback (STANDINGS, DRAW, TABLE)...")
+        fallbacks = ["STANDINGS", "DRAW", "TABLE", "Standings", "Draw", "Table"]
+        for label in fallbacks:
+             # Look for anchor tags containing the text inside the detail__tabs container
+             text_locator = page.locator(f".detail__tabs a:has-text('{label}')")
+             if await text_locator.count() > 0:
+                btn = text_locator.first
+                if await btn.is_visible(timeout=2000):
+                    await btn.click()
+                    await _post_activation_prep(page)
+                    return True
+
+        print(f"      [Extractor] Standings tab could not be activated (Selector: {tab_selector or 'N/A'})")
+        return False
     except Exception as e:
         print(f"      [Extractor] Failed to activate Standings tab: {e}")
         return False
+
+async def _post_activation_prep(page: Page):
+    """Wait for content and dismiss popups after tab activation."""
+    await page.wait_for_load_state("domcontentloaded")
+    await asyncio.sleep(2.0)
+    await fs_universal_popup_dismissal(page, "fs_standings_tab")
+    await asyncio.sleep(3.0)
 
 async def extract_standings_data(page: Page, context: str = "fs_standings_tab") -> Dict[str, Any]:
     """

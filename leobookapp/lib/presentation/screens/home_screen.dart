@@ -8,8 +8,6 @@ import '../widgets/featured_carousel.dart';
 import '../widgets/news_feed.dart';
 import '../widgets/footnote_section.dart';
 import 'all_predictions_screen.dart';
-import 'rule_engine/backtest_dashboard.dart';
-import 'package:leobookapp/logic/cubit/user_cubit.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -156,25 +154,6 @@ class HomeScreen extends StatelessWidget {
             return Container();
           },
         ),
-      ),
-      floatingActionButton: BlocBuilder<UserCubit, UserState>(
-        builder: (context, state) {
-          if (state.user.canCreateCustomRules) {
-            return FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BacktestDashboard(),
-                  ),
-                );
-              },
-              tooltip: "Rule Engine (Lite/Pro)",
-              child: const Icon(Icons.science),
-            );
-          }
-          return const SizedBox.shrink(); // Hide for unregistered
-        },
       ),
     );
   }
