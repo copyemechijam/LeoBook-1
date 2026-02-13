@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
 
 from Data.Access.supabase_client import get_supabase_client
+from Data.Access.db_helpers import DB_DIR, files_and_headers
 
 logger = logging.getLogger(__name__)
 
@@ -255,11 +256,23 @@ class SyncManager:
         table_name = conf['table']
         conflict_key = conf['key']
 
-        # Clean data for Supabase (None handling)
+        # Get whitelist from headers (Data/Store/...)
+        csv_name = conf.get('csv')
+        csv_path = str(DATA_DIR / csv_name) if csv_name else None
+        whitelist = set(files_and_headers.get(csv_path, []))
+        
+        # Always allow standard Supabase/Audit columns even if not in CSV
+        whitelist.update(['id', 'created_at', 'updated_at', 'last_updated'])
+
+        # Clean data for Supabase (None handling and whitelisting)
         cleaned_data = []
         for row in data:
             clean = {}
             for k, v in row.items():
+                # Filter against whitelist
+                if whitelist and k not in whitelist:
+                    continue
+
                 if v == '' or v == 'N/A':
                     clean[k] = None
                 else:

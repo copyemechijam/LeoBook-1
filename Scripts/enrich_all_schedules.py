@@ -43,7 +43,7 @@ from Core.Utils.constants import NAVIGATION_TIMEOUT, WAIT_FOR_LOAD_STATE_TIMEOUT
 
 # Configuration
 CONCURRENCY = int(os.getenv('ENRICH_CONCURRENCY', 2))  # Default 2 for stability
-BATCH_SIZE = int(os.getenv('ENRICH_BATCH_SIZE', 30))   # Report progress more frequently
+BATCH_SIZE = int(os.getenv('ENRICH_BATCH_SIZE', 5))   # Report progress more frequently
 KNOWLEDGE_PATH = Path(__file__).parent.parent / "Config" / "knowledge.json"
 
 # Selective dynamic selectors will still be used but Core/ extracts will handle standings
@@ -477,10 +477,22 @@ async def enrich_all_schedules(limit: Optional[int] = None, dry_run: bool = Fals
 
             print(f"   [+] Enriched {len(enriched_batch)} matches")
             print(f"   [+] Teams: {len(teams_added)}, Leagues: {len(leagues_added)}")
-            if extract_standings:
-                print(f"   [+] Standings rows saved: {standings_saved}")
-            if backfill_predictions:
-                print(f"   [+] Predictions backfilled: {predictions_backfilled}")
+
+        # --- FINAL SYNC FLUSH ---
+        print(f"   [SYNC] Flushing remaining buffered data to Supabase...")
+        if sync_buffer_schedules:
+            await sync_manager.batch_upsert('schedules', sync_buffer_schedules)
+        if sync_buffer_teams:
+            await sync_manager.batch_upsert('teams', sync_buffer_teams)
+        if sync_buffer_leagues:
+            await sync_manager.batch_upsert('region_league', sync_buffer_leagues)
+        if sync_buffer_standings:
+            await sync_manager.batch_upsert('standings', sync_buffer_standings)
+
+        if extract_standings:
+            print(f"   [+] Standings rows saved: {standings_saved}")
+        if backfill_predictions:
+            print(f"   [+] Predictions backfilled: {predictions_backfilled}")
         
         # --- FINAL SYNC ---
         if not dry_run:
