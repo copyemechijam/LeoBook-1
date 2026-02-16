@@ -156,7 +156,7 @@ async def run_accuracy_generation():
 from .outcome_reviewer import (
     get_predictions_to_review,
     save_single_outcome,
-    process_review_task,
+    process_review_task_offline,
     run_review_process
 )
 
@@ -167,9 +167,13 @@ __all__ = [
     'evaluate_prediction',
     'get_predictions_to_review',
     'save_single_outcome',
-    'process_review_task',
+    'process_review_task_offline',
     'run_review_process'
 ]
+
+# Note: run_review_process no longer requires playwright argument
+async def start_review():
+    await run_review_process()
 
 # Version information
 __version__ = "2.6.0"

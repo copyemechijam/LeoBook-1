@@ -5,8 +5,7 @@ import os
 import requests
 import json
 import base64
-import google.generativeai as genai
-from google.generativeai.types import GenerationConfig
+import google.genai as genai
 
 # Default fallback URL if env var is missing
 DEFAULT_API_URL = "http://127.0.0.1:8080/v1/chat/completions"

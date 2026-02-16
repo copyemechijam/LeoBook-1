@@ -6,9 +6,10 @@ scikit-learn
 requests
 gguf
 RapidFuzz
-google-generativeai
+google-genai
 aiohttp
 nest-asyncio
+fuzzywuzzy
 
 # Supabase sync dependencies
 supabase>=2.0.0

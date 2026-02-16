@@ -41,6 +41,7 @@ from Data.Access.db_helpers import (
 )
 from Data.Access.outcome_reviewer import smart_parse_datetime
 from Core.Browser.Extractors.standings_extractor import extract_standings_data, activate_standings_tab
+from Core.Browser.Extractors.league_page_extractor import extract_league_match_urls
 from Modules.Flashscore.fs_utils import retry_extraction
 from Core.Utils.constants import NAVIGATION_TIMEOUT, WAIT_FOR_LOAD_STATE_TIMEOUT
 
@@ -48,6 +49,7 @@ from Core.Utils.constants import NAVIGATION_TIMEOUT, WAIT_FOR_LOAD_STATE_TIMEOUT
 CONCURRENCY = int(os.getenv('ENRICH_CONCURRENCY', 5))  # Default 5 for stability
 BATCH_SIZE = int(os.getenv('ENRICH_BATCH_SIZE', 10))   # Report progress more frequently
 KNOWLEDGE_PATH = Path(__file__).parent.parent / "Config" / "knowledge.json"
+HISTORICAL_GAP_LIMIT = 500  # Prevent Priority 3 bloat
 
 # Selective dynamic selectors will still be used but Core/ extracts will handle standings
 
@@ -90,11 +92,34 @@ async def _raw_safe_text(page, selector: str) -> Optional[str]:
 
 
 async def _smart_attr(page, context: str, key: str, attr: str) -> Optional[str]:
-    """Safe extraction using direct selector lookup."""
+    """Safe extraction using direct selector lookup with hardening."""
     try:
         selector = SelectorManager.get_selector(context, key)
         if selector:
+            # Hardening: Wait for selector if it might be dynamic
+            try:
+                await page.wait_for_selector(selector, timeout=2000)
+            except: pass
             return await _raw_safe_attr(page, selector, attr)
+    except:
+        pass
+    return None
+
+async def _smart_text(page, context: str, key: str) -> Optional[str]:
+    """Safe extraction using direct selector lookup with hardening."""
+    try:
+        selector = SelectorManager.get_selector(context, key)
+        if selector:
+            # Hardening: Wait for selector if it might be dynamic
+            try:
+                await page.wait_for_selector(selector, timeout=2000)
+            except: pass
+            
+            text = await _raw_safe_text(page, selector)
+            if text and text.lower() == "loading...":
+                await asyncio.sleep(2)
+                text = await _raw_safe_text(page, selector)
+            return text
     except:
         pass
     return None
@@ -130,11 +155,27 @@ def _standardize_url(url: str) -> str:
     return url
 
 
+def strip_league_stage(league_name: str):
+    """Strips ' - Round X' etc. and returns (clean_league, stage)."""
+    if not league_name: return "", ""
+    # Common patterns: ' - Round 25', ' - Group A', ' - Play Offs', ' - Qualification'
+    match = re.search(r" - (Round \d+|Group [A-Z]|Play Offs|Qualification|Relegation Group|Championship Group|Finals?)$", league_name, re.IGNORECASE)
+    if match:
+        stage = match.group(1)
+        base_league = league_name[:match.start()].strip()
+        return base_league, stage
+    return league_name, ""
+
+
 async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
-                                    extract_standings: bool = False) -> Optional[Dict]:
+                                    extract_standings: bool = False,
+                                    needs: List[str] = None) -> Optional[Dict]:
     """
     Extract team IDs, crests, URLs, league info, score, datetime, and optionally standings.
+    Targeted extraction based on 'needs'.
     """
+    if not needs: needs = ['ids', 'date', 'time', 'region_league', 'league_id', 'scores']
+    
     try:
         # Use retry for navigation
         async def _navigate():
@@ -145,85 +186,111 @@ async def extract_match_enrichment(page, match_url: str, sel: Dict[str, str],
 
         enriched = {}
 
-        # --- HOME TEAM ---
-        home_href = await _smart_attr(page, "fs_match_page", "home_name", "href")
-        if home_href:
-            enriched['home_team_id'] = _id_from_href(home_href)
-            enriched['home_team_url'] = _standardize_url(home_href)
-        home_name = await _smart_text(page, "fs_match_page", "home_name")
-        if home_name:
-            enriched['home_team_name'] = home_name
-        home_crest_src = await _smart_attr(page, "fs_match_page", "home_crest", "src")
-        if home_crest_src:
-            enriched['home_team_crest'] = _standardize_url(home_crest_src)
+        # --- HOME TEAM (IDs) ---
+        if 'ids' in needs or 'league_id' in needs:
+            home_href = await _smart_attr(page, "fs_match_page", "home_name", "href")
+            if home_href:
+                enriched['home_team_id'] = _id_from_href(home_href)
+                enriched['home_team_url'] = _standardize_url(home_href)
+            home_name = await _smart_text(page, "fs_match_page", "home_name")
+            if home_name:
+                enriched['home_team_name'] = home_name
+            home_crest_src = await _smart_attr(page, "fs_match_page", "home_crest", "src")
+            if home_crest_src:
+                enriched['home_team_crest'] = _standardize_url(home_crest_src)
 
-        # --- AWAY TEAM ---
-        away_href = await _smart_attr(page, "fs_match_page", "away_name", "href")
-        if away_href:
-            enriched['away_team_id'] = _id_from_href(away_href)
-            enriched['away_team_url'] = _standardize_url(away_href)
-        away_name = await _smart_text(page, "fs_match_page", "away_name")
-        if away_name:
-            enriched['away_team_name'] = away_name
-        away_crest_src = await _smart_attr(page, "fs_match_page", "away_crest", "src")
-        if away_crest_src:
-            enriched['away_team_crest'] = _standardize_url(away_crest_src)
+        # --- AWAY TEAM (IDs) ---
+        if 'ids' in needs or 'league_id' in needs:
+            away_href = await _smart_attr(page, "fs_match_page", "away_name", "href")
+            if away_href:
+                enriched['away_team_id'] = _id_from_href(away_href)
+                enriched['away_team_url'] = _standardize_url(away_href)
+            away_name = await _smart_text(page, "fs_match_page", "away_name")
+            if away_name:
+                enriched['away_team_name'] = away_name
+            away_crest_src = await _smart_attr(page, "fs_match_page", "away_crest", "src")
+            if away_crest_src:
+                enriched['away_team_crest'] = _standardize_url(away_crest_src)
 
         # --- REGION + LEAGUE ---
-        region_name = await _smart_text(page, "fs_match_page", "region_name")
-        if region_name:
-            enriched['region'] = region_name
+        if 'region_league' in needs or 'league_id' in needs:
+            region_name = await _smart_text(page, "fs_match_page", "region_name")
+            if region_name:
+                enriched['region'] = region_name
 
-        region_flag_src = await _smart_attr(page, "fs_match_page", "region_flag_img", "src")
-        if region_flag_src:
-            enriched['region_flag'] = region_flag_src
+            league_name_text = await _smart_text(page, "fs_match_page", "league_url")
+            if league_name_text:
+                enriched['league'] = league_name_text
 
-        region_url_href = await _smart_attr(page, "fs_match_page", "region_url", "href")
-        if region_url_href:
-            enriched['region_url'] = _standardize_url(region_url_href)
+            if region_name and league_name_text:
+                clean_league, stage = strip_league_stage(league_name_text)
+                enriched['region_league'] = f"{region_name.upper()} - {clean_league}"
+                enriched['league_stage'] = stage
 
-        league_url_href = await _smart_attr(page, "fs_match_page", "league_url", "href")
-        if league_url_href:
-            enriched['league_url'] = _standardize_url(league_url_href)
-            enriched['rl_id'] = _id_from_href(league_url_href)
-
-        league_name_text = await _smart_text(page, "fs_match_page", "league_url")
-        if league_name_text:
-            enriched['league'] = league_name_text
-
-        if region_name and league_name_text:
-            enriched['region_league'] = f"{region_name.upper()} - {league_name_text}"
+            league_url_href = await _smart_attr(page, "fs_match_page", "league_url", "href")
+            if league_url_href:
+                enriched['league_url'] = _standardize_url(league_url_href)
+                enriched['rl_id'] = _id_from_href(league_url_href)
+                enriched['league_id'] = enriched['rl_id']
 
         # --- FINAL SCORE ---
-        home_score = await _smart_text(page, "fs_match_page", "final_score_home")
-        away_score = await _smart_text(page, "fs_match_page", "final_score_away")
-        if home_score:
-            enriched['home_score'] = home_score
-        if away_score:
-            enriched['away_score'] = away_score
+        if 'scores' in needs:
+            home_score = await _smart_text(page, "fs_match_page", "final_score_home")
+            away_score = await _smart_text(page, "fs_match_page", "final_score_away")
+            if home_score:
+                enriched['home_score'] = home_score
+            if away_score:
+                enriched['away_score'] = away_score
 
         # --- MATCH DATETIME ---
-        try:
-            dt_text = await _smart_text(page, "fs_match_page", "match_time")
-            if dt_text:
-                date_part, time_part = smart_parse_datetime(dt_text)
-                if date_part:
-                    enriched['date'] = date_part
-                if time_part:
-                    enriched['match_time'] = time_part
-        except:
-            pass
+        if 'date' in needs or 'time' in needs:
+            try:
+                dt_text = await _smart_text(page, "fs_match_page", "match_time")
+                if dt_text:
+                    date_part, time_part = smart_parse_datetime(dt_text)
+                    if 'date' in needs and date_part:
+                        enriched['date'] = date_part
+                    if 'time' in needs and time_part:
+                        enriched['match_time'] = time_part
+            except:
+                pass
 
-        # --- STANDINGS (optional) ---
+        # --- LEAGUE_ID DEEP SCRAPE ---
+        if 'league_id' in needs:
+            # 3. League URL (Deep Scrape)
+            league_url = await _smart_attr(page, "fs_match_page", "league_url", "href")
+            if league_url:
+                enriched['league_url'] = _standardize_url(league_url)
+                # Parse ID from URL
+                enriched['league_id'] = _id_from_href(league_url)
+                enriched['rl_id'] = enriched['league_id']
+                
+                # Visit results page to get metadata
+                try:
+                    from Core.Browser.Extractors.league_page_extractor import extract_league_metadata
+                    l_results_url = enriched.get('league_url')
+                    if not l_results_url.endswith('/results/'): l_results_url = l_results_url.rstrip('/') + '/results/'
+                    await page.goto(l_results_url, wait_until='domcontentloaded')
+                    await asyncio.sleep(2)
+                    
+                    league_meta = await extract_league_metadata(page)
+                    if league_meta:
+                        enriched.update(league_meta)
+                except: pass
+            else:
+                print(f"      [ALERT] No league URL found for {match_url}. Flagging for manual review.")
+                enriched['match_status'] = 'manual_review_needed'
+
+        # --- STANDINGS ---
         if extract_standings:
             try:
+                from Core.Browser.Extractors.standings_extractor import activate_standings_tab, extract_standings_data
                 tab_active = await activate_standings_tab(page)
                 if tab_active:
                     standings_result = await retry_extraction(extract_standings_data, page)
                     if standings_result:
                         enriched['_standings_data'] = standings_result
-            except Exception as e:
-                print(f"      [Smart Standings Error] {e}")
+            except: pass
 
         return enriched if enriched else None
 
@@ -243,7 +310,8 @@ async def process_match_task_isolated(browser: Browser, match: Dict, sel: Dict[s
         )
         try:
             page = await context.new_page()
-            enriched = await extract_match_enrichment(page, match['match_link'], sel, extract_standings)
+            needs = match.get('_enrich_needs', [])
+            enriched = await extract_match_enrichment(page, match['match_link'], sel, extract_standings, needs)
             if enriched:
                 match.update(enriched)
             else:
@@ -284,8 +352,10 @@ async def enrich_batch(playwright: Playwright, matches: List[Dict], batch_num: i
 
     async def worker(match):
         async with semaphore:
-            # Brief jitter/stagger to prevent simultaneous CPU bursts
-            await asyncio.sleep(0.5)
+            # Enhanced Jitter: random delay between 0.5 and 2.5 seconds
+            import random
+            jitter = 0.5 + random.random() * 2.0
+            await asyncio.sleep(jitter)
             return await process_match_task_isolated(browser, match, sel, extract_standings)
 
     # Gather results for all matches in the batch
@@ -357,7 +427,8 @@ async def resolve_metadata_gaps(df: pd.DataFrame, sync_manager: SyncManager) -> 
 
 async def enrich_all_schedules(limit: Optional[int] = None, dry_run: bool = False,
                                 extract_standings: bool = False,
-                                backfill_predictions: bool = False):
+                                backfill_predictions: bool = False,
+                                league_page: bool = False):
     """
     Main enrichment pipeline.
     
@@ -400,6 +471,61 @@ async def enrich_all_schedules(limit: Optional[int] = None, dry_run: bool = Fals
     
     print(f"[INFO] Loaded {len(sel)} selectors from knowledge.json (fs_match_page)")
 
+    # --- PHASE 0: LEAGUE PAGE HARVESTING (Proactive) ---
+    if league_page:
+        print("\n" + "=" * 80)
+        print("  PHASE 0: LEAGUE PAGE HARVESTING")
+        print("  Goal: Proactively harvest all match URLs from active leagues.")
+        print("=" * 80)
+        
+        if not os.path.exists(REGION_LEAGUE_CSV):
+            print("[WARNING] region_league.csv not found. Skipping league harvesting.")
+        else:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page()
+                
+                leagues_df = pd.read_csv(REGION_LEAGUE_CSV, dtype=str).fillna('')
+                # Filter for leagues that have a URL
+                active_leagues = leagues_df[leagues_df['league_url'] != ''].to_dict('records')
+                
+                print(f"[INFO] Scanning {len(active_leagues)} leagues for new matches...")
+                
+                new_match_urls = set()
+                for league in active_leagues:
+                    l_url = league.get('league_url')
+                    l_name = f"{league.get('region', '')}: {league.get('league', '')}"
+                    print(f"   [League] Harvesting {l_name}...")
+                    
+                    found_urls = await extract_league_match_urls(page, l_url, mode="results")
+                    for url in found_urls:
+                        new_match_urls.add(url)
+                
+                await browser.close()
+                
+                if new_match_urls:
+                    print(f"[SUCCESS] Harvested {len(new_match_urls)} total match URLs from league pages.")
+                    # Load current schedules to avoid duplicates
+                    df_current = pd.read_csv(SCHEDULES_CSV, dtype=str).fillna('')
+                    existing_links = set(df_current['match_link'].tolist())
+                    
+                    added_count = 0
+                    for m_url in new_match_urls:
+                        if m_url not in existing_links:
+                            # Add basic entry
+                            new_entry = {
+                                'fixture_id': m_url.split('/')[2] if '/match/' in m_url else 'Unknown',
+                                'date': 'Pending',
+                                'match_time': 'Pending',
+                                'match_status': 'scheduled',
+                                'match_link': m_url
+                            }
+                            # Use save_schedule_entry to handle defaults/headers
+                            save_schedule_entry(new_entry)
+                            added_count += 1
+                    
+                    print(f"[INFO] Added {added_count} new unique matches to schedules.csv")
+
     # --- PROLOGUE PAGE 2: MISSING METADATA ANALYSIS ---
     print("\n" + "=" * 80)
     print("  PROLOGUE PAGE 2: MISSING METADATA ANALYSIS")
@@ -409,6 +535,15 @@ async def enrich_all_schedules(limit: Optional[int] = None, dry_run: bool = Fals
     # Load with Pandas for Analysis
     df_schedules = pd.read_csv(SCHEDULES_CSV, dtype=str).fillna('')
     
+    # --- ROW CLEANUP: Remove invalid matches ---
+    initial_count = len(df_schedules)
+    df_schedules = df_schedules[~((df_schedules['fixture_id'] == '') & (df_schedules['match_link'] == ''))]
+    removed_count = initial_count - len(df_schedules)
+    if removed_count > 0:
+        print(f"[CLEANUP] Removed {removed_count} rows with missing both fixture_id and match_link.")
+        if not dry_run:
+            df_schedules.to_csv(SCHEDULES_CSV, index=False, encoding='utf-8')
+
     gaps_found = analyze_metadata_gaps(df_schedules)
     print(f"[INFO] Initial scan found {len(gaps_found)} fixtures with structural metadata gaps.")
     
@@ -424,17 +559,63 @@ async def enrich_all_schedules(limit: Optional[int] = None, dry_run: bool = Fals
     # Convert to list of dicts for the enrichment loop
     all_matches = df_schedules.to_dict('records')
     
-    # Filter matches that STILL need enrichment (deep scrape)
-    to_enrich = [
-        m for m in all_matches
-        if m.get('match_link') and (
-            not m.get('home_team_id') or
-            not m.get('away_team_id') or
-            m.get('region_league') in ('Unknown', 'N/A', '') or
-            len(m.get('match_time', '')) > 5 or
-            m.get('match_time') in ('Unknown', 'N/A', '')
-        )
-    ]
+    # Filter matches based on Purpose-Driven Enrichment Needs
+    to_enrich = []
+    for m in all_matches:
+        if not m.get('match_link'): continue
+        
+        needs = []
+        if not m.get('home_team_id') or not m.get('away_team_id'): needs.append('ids')
+        if m.get('date') in ('Pending', '', 'Unknown'): needs.append('date')
+        if m.get('match_time') in ('Pending', '', 'Unknown'): needs.append('time')
+        if m.get('region_league') in ('Unknown', 'N/A', ''): needs.append('region_league')
+        if not m.get('league_id'): needs.append('league_id')
+        if m.get('home_score') in ('N/A', '') or m.get('away_score') in ('N/A', ''):
+             # Only if match is likely finished
+             if m.get('match_status') == 'finished':
+                 needs.append('scores')
+        
+        if needs:
+            m['_enrich_needs'] = needs
+            to_enrich.append(m)
+
+    # --- ENRICHMENT PRIORITIZATION ---
+    def get_priority(m):
+        # Priority 1: Future matches (next 48h)
+        # Priority 2: Recent past matches needing scores (last 24h)
+        # Priority 3: Deep gaps
+        try:
+            d_str = m.get('date')
+            t_str = m.get('match_time')
+            if d_str == 'Pending' or not d_str: return 0 # High priority if date missing
+            
+            m_dt = datetime.strptime(f"{d_str} {t_str if t_str != 'Pending' else '00:00'}", "%d.%m.%Y %H:%M")
+            now = datetime.now()
+            
+            if m_dt > now: return 1 # Future
+            if (now - m_dt).days <= 1: return 2 # Recent Past
+            return 3 # Deep Gap
+        except:
+            return 4 # Parsing error, low priority
+
+    to_enrich.sort(key=get_priority)
+    
+    # --- Priority 3 Capping (Hardening) ---
+    p3_count = 0
+    final_to_enrich = []
+    for m in to_enrich:
+        p = get_priority(m)
+        if p == 3:
+            if p3_count < HISTORICAL_GAP_LIMIT:
+                final_to_enrich.append(m)
+                p3_count += 1
+            else:
+                continue # Skip excess historical gaps
+        else:
+            final_to_enrich.append(m)
+    
+    to_enrich = final_to_enrich
+    print(f"  [PRIORITY] Sorted {len(to_enrich)} tasks. (Capped Priority 3 to {HISTORICAL_GAP_LIMIT})")
 
     # Calculate auto-scaling concurrency (2-5)
     calc_concurrency = max(2, min(5, len(to_enrich) // 20))
@@ -623,11 +804,14 @@ if __name__ == "__main__":
     parser.add_argument('--dry-run', action='store_true', help='Simulate without writing files')
     parser.add_argument('--standings', action='store_true', help='Also extract standings data from Standings tab')
     parser.add_argument('--backfill-predictions', action='store_true', help='Fix region_league/crests in predictions.csv')
+    parser.add_argument('--league-page', action='store_true', help='Harvest all match URLs from registered league pages')
+    
     args = parser.parse_args()
 
     asyncio.run(enrich_all_schedules(
         limit=args.limit,
         dry_run=args.dry_run,
         extract_standings=args.standings,
-        backfill_predictions=args.backfill_predictions
+        backfill_predictions=args.backfill_predictions,
+        league_page=args.league_page
     ))

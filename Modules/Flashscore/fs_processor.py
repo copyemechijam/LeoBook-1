@@ -4,12 +4,24 @@
 
 import asyncio
 from playwright.async_api import Browser
-from Data.Access.db_helpers import save_prediction, save_region_league_entry, save_standings
+from Data.Access.db_helpers import save_prediction, save_region_league_entry, save_standings, save_team_entry
 from Core.Browser.site_helpers import fs_universal_popup_dismissal
 from Core.Browser.Extractors.h2h_extractor import extract_h2h_data, activate_h2h_tab, save_extracted_h2h_to_schedules
 from Core.Browser.Extractors.standings_extractor import extract_standings_data, activate_standings_tab
 from Core.Utils.monitor import PageMonitor
 from Core.Utils.utils import log_error_state
+import re
+
+def strip_league_stage(league_name: str):
+    """Strips ' - Round X' etc. and returns (clean_league, stage)."""
+    if not league_name: return "", ""
+    # Common patterns: ' - Round 25', ' - Group A', ' - Play Offs', ' - Qualification'
+    match = re.search(r" - (Round \d+|Group [A-Z]|Play Offs|Qualification|Relegation Group|Championship Group|Finals?)$", league_name, re.IGNORECASE)
+    if match:
+        stage = match.group(1)
+        base_league = league_name[:match.start()].strip()
+        return base_league, stage
+    return league_name, ""
 from Core.Utils.constants import NAVIGATION_TIMEOUT, WAIT_FOR_LOAD_STATE_TIMEOUT
 from Core.Intelligence.model import RuleEngine
 from .fs_utils import retry_extraction
@@ -94,13 +106,18 @@ async def process_match_task(match_data: dict, browser: Browser):
                     standings_league = h2h_data.get("region_league", "Unknown")
                 standings_league_url = standings_result.get("league_url", "")
                 if standings_result.get("has_draw_table"):
-                    print(f"      [Skip] Match has draw table, skipping.")
-                    return False
+                    print(f"      [Graceful Skip] Match has Draw table (Cup/Tournament). Proceeding without standings.")
+                    # We don't return False here, allowing H2H-only prediction
                 if standings_data and standings_league != "Unknown":
                     for row in standings_data:
                         row['url'] = standings_league_url
                     save_standings(standings_data, standings_league)
                     print(f"      [OK Standing] Standings tab data extracted for {standings_league}")
+                ## Phase 5: League Stage Parsing Fix
+                # - [x] Update `db_helpers.py` headers for `league_stage`
+                # - [x] Update `enrich_all_schedules.py`
+                ## Phase 8: Draw Tab Skip Logic
+                # - [x] Implement graceful standings skip in `fs_processor.py`
             except Exception as e:
                 print(f"      [Warning] Failed to load Standings tab for {match_label}: {e}")
 
@@ -140,6 +157,12 @@ async def process_match_task(match_data: dict, browser: Browser):
             if not rl_id:
                 rl_id = f"{region_name}_{league_name}".replace(' ', '_').replace('-', '_').upper()
             
+            # --- LEAGUE STAGE PARSING ---
+            clean_league, stage = strip_league_stage(league_name)
+            match_data['region_league'] = f"{region_name.upper()} - {clean_league}"
+            match_data['league_stage'] = stage
+            match_data['league_id'] = rl_id
+            
             save_region_league_entry({
                 'rl_id': rl_id,
                 'region': region_name,
@@ -172,6 +195,24 @@ async def process_match_task(match_data: dict, browser: Browser):
         # --- Process Data & Predict ---
         analysis_input = {"h2h_data": h2h_data, "standings": standings_data}
         prediction = RuleEngine.analyze(analysis_input)
+
+        # Record Reference Data for Offline Review & Debugging
+        h2h_ids = []
+        if h2h_data:
+            for m in h2h_data.get('head_to_head', []):
+                if m.get('fixture_id'): h2h_ids.append(m['fixture_id'])
+        
+        home_form_ids = []
+        away_form_ids = []
+        if h2h_data:
+            for m in h2h_data.get('home_last_10_matches', []):
+                if m.get('fixture_id'): home_form_ids.append(m['fixture_id'])
+            for m in h2h_data.get('away_last_10_matches', []):
+                if m.get('fixture_id'): away_form_ids.append(m['fixture_id'])
+
+        prediction['h2h_fixture_ids'] = h2h_ids
+        prediction['form_fixture_ids'] = home_form_ids + away_form_ids
+        prediction['standings_snapshot'] = standings_data if standings_data else []
 
         total_xg = prediction.get("total_xg", 0.0)
         p_type = prediction.get("type", "SKIP")

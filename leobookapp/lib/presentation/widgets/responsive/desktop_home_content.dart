@@ -117,7 +117,7 @@ class _DesktopHomeContentState extends State<DesktopHomeContent>
         crossAxisCount: MediaQuery.of(context).size.width > 1600 ? 3 : 2,
         crossAxisSpacing: 20,
         mainAxisSpacing: 20,
-        childAspectRatio: 2.2,
+        childAspectRatio: 1.8,
       ),
       itemCount: matches.length,
       itemBuilder: (context, index) {

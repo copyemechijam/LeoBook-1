@@ -18,7 +18,7 @@ from .review_outcomes import (
     evaluate_prediction,
     get_predictions_to_review,
     save_single_outcome,
-    process_review_task,
+    process_review_task_offline,
     run_review_process
 )
 
@@ -29,6 +29,6 @@ __all__ = [
     'evaluate_prediction',
     'get_predictions_to_review',
     'save_single_outcome',
-    'process_review_task',
+    'process_review_task_offline',
     'run_review_process'
 ]

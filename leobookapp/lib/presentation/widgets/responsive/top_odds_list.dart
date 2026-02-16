@@ -30,7 +30,7 @@ class TopOddsList extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         SizedBox(
-          height: 180,
+          height: 200,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: const [

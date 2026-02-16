@@ -105,23 +105,37 @@ class SyncManager:
             logger.error(f"    [x] Failed to read {csv_file} with pandas: {e}")
             return
 
-        # 3. Delta Detection
+        # 3. Delta Detection (Latest Wins logic)
         remote_df = pd.DataFrame(list(remote_meta.items()), columns=[key_field, 'remote_ts'])
         
+        # Normalize timestamps for fair comparison
+        def normalize_ts(ts):
+            if not ts or ts in ('None', 'nan', ''): return '0000-00-00T00:00:00'
+            try:
+                # Ensure ISO format comparison works as string comparison
+                return pd.to_datetime(ts).isoformat()
+            except:
+                return '0000-00-00T00:00:00'
+
+        df_local['last_updated'] = df_local['last_updated'].apply(normalize_ts)
+        remote_df['remote_ts'] = remote_df['remote_ts'].apply(normalize_ts)
+
         # Merge to compare
         merged = pd.merge(df_local[[key_field, 'last_updated']], remote_df, on=key_field, how='outer').fillna('')
         
+        # PUSH: Local is strictly newer OR Remote doesn't have it
         to_push_ids = merged[
             (merged['last_updated'] > merged['remote_ts']) | 
-            ((merged['last_updated'] != '') & (merged['remote_ts'] == ''))
+            ((merged['last_updated'] != '0000-00-00T00:00:00') & (merged['remote_ts'] == '0000-00-00T00:00:00'))
         ][key_field].tolist()
 
+        # PULL: Remote is strictly newer OR Local doesn't have it
         to_pull_ids = merged[
             (merged['remote_ts'] > merged['last_updated']) |
-            ((merged['remote_ts'] != '') & (merged['last_updated'] == ''))
+            ((merged['remote_ts'] != '0000-00-00T00:00:00') & (merged['last_updated'] == '0000-00-00T00:00:00'))
         ][key_field].tolist()
 
-        logger.info(f"    Delta: {len(to_push_ids)} to push, {len(to_pull_ids)} to pull.")
+        logger.info(f"    Delta: {len(to_push_ids)} to push, {len(to_pull_ids)} to pull. (Conflict resolution: Latest Wins)")
 
         # 4. Pull Operations
         if to_pull_ids:

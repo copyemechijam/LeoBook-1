@@ -81,7 +81,7 @@ async def main():
                         sync_mgr = SyncManager()
                         await sync_mgr.sync_on_startup()
 
-                        # 1b. Outcome Review Loop
+                        from Data.Access.outcome_reviewer import run_review_process
                         await run_review_process(p)
 
                         # 1c. Accuracy Report

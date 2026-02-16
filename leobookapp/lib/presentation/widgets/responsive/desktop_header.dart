@@ -76,9 +76,8 @@ class DesktopHeader extends StatelessWidget {
   Widget _buildDateTrigger(BuildContext context) {
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
-        final currentDate = state is HomeLoaded
-            ? state.selectedDate
-            : DateTime.now();
+        final currentDate =
+            state is HomeLoaded ? state.selectedDate : DateTime.now();
         return GestureDetector(
           onTap: () async {
             final date = await LeoDatePicker.show(context, currentDate);
@@ -153,15 +152,11 @@ class DesktopHeader extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white10, width: 1),
       ),
-      child: Container(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          image: DecorationImage(
-            image: NetworkImage(
-              "https://lh3.googleusercontent.com/a/default-user",
-            ),
-            fit: BoxFit.cover,
-          ),
+      child: const Center(
+        child: Icon(
+          Icons.person_rounded,
+          color: Colors.white24,
+          size: 24,
         ),
       ),
     );

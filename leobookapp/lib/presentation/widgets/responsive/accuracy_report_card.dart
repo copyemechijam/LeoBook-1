@@ -36,6 +36,7 @@ class AccuracyReportCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
+          height: 220,
           child: Row(
             children: [
               _buildMainAccuracy(),
